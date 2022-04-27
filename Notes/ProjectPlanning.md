@@ -1,4 +1,4 @@
-# Notes
+# Project Planning
 
 ## Compilation
 
