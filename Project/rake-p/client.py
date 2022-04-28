@@ -1,20 +1,54 @@
 # Manages the connections described by the Rakefile.
 PATH_Rakefile = 'Project/Rakefile'
 
+# def readRakefile(filepath, verbose=False):
+#   print("[rake.p] Reading Rakefile at '" + filepath + "'.")
+#   f = open(filepath)
+#   Rakefile = f.readlines()
+#   f.close()
+
+#   print("[rake.p] Read completed.")
+#   if verbose:
+#     print("[rake.p] Printing Rakefile.")
+#     for line in Rakefile:
+#       print("> " + line)
+#     print("---")
+  
+#   return Rakefile
+
 def readRakefile(filepath, verbose=False):
   print("[rake.p] Reading Rakefile at '" + filepath + "'.")
-  f = open(filepath)
-  Rakefile = f.readlines()
-  f.close()
+
+  with open(filepath, "r") as f:
+    line = f.readline()
+    index = 0
+
+    while line:
+      if line.startswith("#") or line.startswith("\n"):
+        None
+      elif line.startswith("PORT  ="):
+        PORT = line.replace("PORT  =","").strip()
+        print(PORT)
+      elif line.startswith("HOSTS ="):
+        HOSTS = line.replace("HOSTS =","").split() 
+        print(HOSTS)
+      else:
+        # "tabs" chris notes are spaces in the example... 
+        # this is temporary fix
+        action = line.replace("\t", "}").replace("    ", "}")
+        print(action)
+      line = f.readline()
+      index += 1
 
   print("[rake.p] Read completed.")
-  if verbose:
-    print("[rake.p] Printing Rakefile.")
-    for line in Rakefile:
-      print("> " + line)
-    print("---")
+  # if verbose:
+  #   print("[rake.p] Printing Rakefile.")
+  #   for line in Rakefile:
+  #     print("> " + line)
+  #   print("---")
   
-  return Rakefile
+  return 0
+
 
 # Parses details for the connection (Port, Hosts, and Action Sets)
 # TODO: Needs heavy simplifying, probably can do this in the reading file part.
@@ -52,7 +86,26 @@ def getConnectionDetails(Rakefile):
 
   return portNum, hostList, actionSet
 
+# --------------------------------------------
 
+
+if __name__ == '__main__':
+  print("[rake.p] Initialised.")
+  Rakefile = readRakefile(PATH_Rakefile)
+  # (PORT, HOSTS, ACTIONS) = getConnectionDetails(Rakefile)
+  # print("[rake.p] Printing PORT.")
+  # print("| " + PORT)
+
+  # print("[rake.p] Printing HOSTS.")
+  # for i in HOSTS:
+  #   print("| " + i)
+    
+  # print("[rake.p] Printing ACTIONS.")
+  # for i in ACTIONS:
+  #   print("| " + i)
+
+
+  
 # class Connection:
 #   def __init__(self, portNum, hostList, actions, verbose=False):
 #     self.PORT     = portNum
@@ -69,27 +122,6 @@ def getConnectionDetails(Rakefile):
 #     print("[rake.p]\n","PORT:\n", self.PORT, "\nHOSTS:")
 #     for i in self.HOSTS:
 #       print("> ", i)
-
-# --------------------------------------------
-
-
-if __name__ == '__main__':
-  print("[rake.p] Initialised.")
-  Rakefile = readRakefile(PATH_Rakefile)
-  (PORT, HOSTS, ACTIONS) = getConnectionDetails(Rakefile)
-  print("[rake.p] Printing PORT.")
-  print("| " + PORT)
-
-  print("[rake.p] Printing HOSTS.")
-  for i in HOSTS:
-    print("| " + i)
-    
-  print("[rake.p] Printing ACTIONS.")
-  for i in ACTIONS:
-    print("| " + i)
-
-
-  
   
 
 

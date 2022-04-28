@@ -1,3 +1,6 @@
+# Comment 
+# Comment 2
+# Comment 3
 PORT  = 6238
 HOSTS = hostname1 hostname2 hostname3:6333
 
