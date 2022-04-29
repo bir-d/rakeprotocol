@@ -24,19 +24,31 @@ def readRakefile(filepath, verbose=False):
     index = 0
 
     while line:
-      if line.startswith("#") or line.startswith("\n"):
+      if line.startswith("#") or len(line.split()) == 0:
         None
       elif line.startswith("PORT  ="):
         PORT = line.replace("PORT  =","").strip()
-        print(PORT)
       elif line.startswith("HOSTS ="):
         HOSTS = line.replace("HOSTS =","").split() 
-        print(HOSTS)
-      else:
-        # "tabs" chris notes are spaces in the example... 
-        # this is temporary fix
-        action = line.replace("\t", "}").replace("    ", "}")
-        print(action)
+      else: # distinguish remote and local actions
+        # "tabs" in chris notes are spaces in the example... 
+        action = line.replace("    ", "\t")
+        if "\t\t" in action:
+          requirement = action.replace("\t\trequires ", "").split()
+          print("REQ:",requirement)
+        elif "\t" in action:
+          if action.startswith("\tremote-"):
+            remoteCommand = action.replace("\tremote-", "").strip()
+            print("R:", remoteCommand)
+          else:
+            localCommand = action.replace("\t", "").strip()
+            print("L:", localCommand)
+        else:
+          actionSet = action.replace(":","").strip()
+          print(actionSet)
+
+        # line = f.readline()
+
       line = f.readline()
       index += 1
 
