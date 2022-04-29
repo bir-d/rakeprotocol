@@ -1,9 +1,12 @@
+import os
+
 # Manages the connections described by the Rakefile.
-PATH_Rakefile = 'Project/Rakefile'
+PATH_Rakefile = 'Project/Rakefile.2'
 
 # Reads in the Rakefile, stores the values in data structures.
 # Note: The "tabs" in the example are spaces in the text,
-#       so readline also replaces 4 spaces to be '\t' 
+#       so readline also replaces 4 spaces to be '\t'.
+# TODO: Handle ' and " characters when included in Rakefile.
 def readRakefile(filepath, verbose=False):
   print("[rake.p] Reading Rakefile at '" + filepath + "'...")
 
@@ -63,12 +66,28 @@ def readRakefile(filepath, verbose=False):
       
     return (PORT, HOSTS, ACTIONSETS)
 
+
+# Only supports local execution.
+def simpleExecuteAll(actionsetNum, actionset):
+  print("[rake.p] Executing actionset", actionsetNum, " commands...", sep="" )
+  for action in actionset:
+    command = action[1]
+    os.system(command)
+
 # --------------------------------------------
 
 if __name__ == '__main__':
   print("[rake.p] Initialised Python rake client.\n")
   PORT, HOSTS, ACTIONSETS = readRakefile(PATH_Rakefile, True)
+
+  # # Uncomment to execute actions in ACTIONSET
+  # # WARNING:  Be absolutely sure any commands such as
+  # #           'rm' are used correctly, or face 
+  # #           PERMANANT IRRECOVERABLE DATA LOSS!
+  # for actionsetNum, actionset in enumerate(ACTIONSETS):
+    # simpleExecuteAll(actionsetNum, actionset)
   
+
 
 
 
