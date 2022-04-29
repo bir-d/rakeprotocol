@@ -1,141 +1,74 @@
 # Manages the connections described by the Rakefile.
 PATH_Rakefile = 'Project/Rakefile'
 
-# def readRakefile(filepath, verbose=False):
-#   print("[rake.p] Reading Rakefile at '" + filepath + "'.")
-#   f = open(filepath)
-#   Rakefile = f.readlines()
-#   f.close()
-
-#   print("[rake.p] Read completed.")
-#   if verbose:
-#     print("[rake.p] Printing Rakefile.")
-#     for line in Rakefile:
-#       print("> " + line)
-#     print("---")
-  
-#   return Rakefile
-
+# Reads in the Rakefile, stores the values in data structures.
+# Note: The "tabs" in the example are spaces in the text,
+#       so readline also replaces 4 spaces to be '\t' 
 def readRakefile(filepath, verbose=False):
-  print("[rake.p] Reading Rakefile at '" + filepath + "'.")
+  print("[rake.p] Reading Rakefile at '" + filepath + "'...")
 
   with open(filepath, "r") as f:
-    line = f.readline()
-    index = 0
+    line = f.readline().replace("    ", "\t")   # Sets 4 spaces to tab character.
+    ACTIONSETS = list()     # List of commands (which are lists too)
 
     while line:
-      if line.startswith("#") or len(line.split()) == 0:
-        None
-      elif line.startswith("PORT  ="):
-        PORT = line.replace("PORT  =","").strip()
-      elif line.startswith("HOSTS ="):
-        HOSTS = line.replace("HOSTS =","").split() 
-      else: # distinguish remote and local actions
-        # "tabs" in chris notes are spaces in the example... 
-        action = line.replace("    ", "\t")
-        if "\t\t" in action:
-          requirement = action.replace("\t\trequires ", "").split()
-          print("REQ:",requirement)
-        elif "\t" in action:
-          if action.startswith("\tremote-"):
-            remoteCommand = action.replace("\tremote-", "").strip()
-            print("R:", remoteCommand)
-          else:
-            localCommand = action.replace("\t", "").strip()
-            print("L:", localCommand)
-        else:
-          actionSet = action.replace(":","").strip()
-          print(actionSet)
+      if line.startswith("actionset"):
+        commands = list()   # List of commands found in an ACTIONSETS.
+        line = f.readline().replace("    ", "\t")
 
-        # line = f.readline()
+        # Commands/requirements of ACTIONSET must start with at least one tab.
+        while line.startswith("\t"):
+          if line.startswith("\tremote-"):  # Indicates command is executed remotely.
+            command = [ "remote",  line.strip().replace("remote-", "")]
+          else:                             # Indicates command is executed locally.
+            command = [ "local",   line.strip()]
+            
+          # Increments line to check for potential requirements.
+          line = f.readline().replace("    ", "\t") 
 
-      line = f.readline()
-      index += 1
+          if line.startswith("\t\t"):   # Requirement lines use two tab characters.
+            # Add requirements as list to the end of the command list.
+            command.append( line.replace("\t\trequires ", "").split() ) 
+            line = f.readline().replace("    ", "\t")
+          else:                         # No requirements for above command.
+            # Append empty list of requirements to the end of command list.
+            command.append( [] )
+          commands.append(command)  # Adds command above to current ACTIONSET commands.
+        ACTIONSETS.append(commands) # Adds the commands of the ACTIONSET to the list of ACTIONSETS.
+      else:
+        # Line is a comment or is whitespace only/
+        if line.startswith("#") or len(line.strip()) == 0:
+          None
+        # Line holds PORT number, which is stored as an integer.
+        elif line.startswith("PORT  ="):
+          PORT = line.replace("PORT  =","").strip()
+        # Line holds HOSTS, which are split and stored as a list.
+        elif line.startswith("HOSTS ="):
+          HOSTS = line.replace("HOSTS =","").split() 
 
-  print("[rake.p] Read completed.")
-  # if verbose:
-  #   print("[rake.p] Printing Rakefile.")
-  #   for line in Rakefile:
-  #     print("> " + line)
-  #   print("---")
-  
-  return 0
+        line = f.readline().replace("    ", "\t")
 
-
-# Parses details for the connection (Port, Hosts, and Action Sets)
-# TODO: Needs heavy simplifying, probably can do this in the reading file part.
-def getConnectionDetails(Rakefile):
-  i, actionSet = 0, Rakefile
-
-  while i < len(actionSet):
-    # Finds the port number (only one)
-    if actionSet[i].startswith("PORT"):
-      portNum = actionSet[i].replace("PORT  = ", "", 1)
-      actionSet.pop(i)
-
-    # Finds the hosts (at least one)
-    elif actionSet[i].startswith("HOSTS = "):
-      hostList = actionSet[i].replace("HOSTS = ", "", 1).split(" ")
-      actionSet.pop(i)
-
-    # Finds all other empty lines
-    elif actionSet[i] != "\n":
-      # If the line does not start with 8 spaces (two tabs) then it is a command
-      if not actionSet[i].startswith("        "):
-        # %COM% identifies a command.
-        actionSet[i] = actionSet[i].replace("    ", "%COM%").replace("\n", "")
-      # If the line starts with 8 spaces, it is a requirement.
-      elif actionSet[i].startswith("        "):
-        # %REQ% identifies a requirement.
-        actionSet[i] = actionSet[i].replace("        ", "%REQ%").replace("\n", "")
-      i+=1
-
-    # Remove all other lines.
-    else:
-      actionSet.pop(i)
-        
-  # TODO: Pair all commands with their requirements.
-
-  return portNum, hostList, actionSet
+    print("[rake.p] Read completed.\n")
+            
+    # Prints out the PORT HOSTS and ACTIONSET details.
+    if verbose:
+      print("[rake.p] Printing results...")
+      print("> PORT:", PORT)
+      print("> HOSTS:", HOSTS)
+      for actionNum, commands in enumerate(ACTIONSETS):
+        print("> actionset"+ str(actionNum))
+        for command in commands:
+          print(">", command)
+      print("[rake.p] Completed result printing.\n")
+      
+    return (PORT, HOSTS, ACTIONSETS)
 
 # --------------------------------------------
 
-
 if __name__ == '__main__':
-  print("[rake.p] Initialised.")
-  Rakefile = readRakefile(PATH_Rakefile)
-  # (PORT, HOSTS, ACTIONS) = getConnectionDetails(Rakefile)
-  # print("[rake.p] Printing PORT.")
-  # print("| " + PORT)
-
-  # print("[rake.p] Printing HOSTS.")
-  # for i in HOSTS:
-  #   print("| " + i)
-    
-  # print("[rake.p] Printing ACTIONS.")
-  # for i in ACTIONS:
-  #   print("| " + i)
-
-
+  print("[rake.p] Initialised Python rake client.\n")
+  PORT, HOSTS, ACTIONSETS = readRakefile(PATH_Rakefile, True)
   
-# class Connection:
-#   def __init__(self, portNum, hostList, actions, verbose=False):
-#     self.PORT     = portNum
-#     self.HOSTS    = [i for i in hostList]
-#     self.ACTIONS  = actions
-
-#     if verbose:
-#       print("[rake.p] PORT:", self.PORT)
-#       print("[rake.p] HOSTS:")
-#       for i in self.HOSTS:
-#         print(i, sep=" ")
-  
-#   def reportConnection(self):
-#     print("[rake.p]\n","PORT:\n", self.PORT, "\nHOSTS:")
-#     for i in self.HOSTS:
-#       print("> ", i)
-  
-
 
 
 
