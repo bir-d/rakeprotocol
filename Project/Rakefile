@@ -6,4 +6,6 @@ HOSTS = hostname1 hostname2 hostname3:6333
 
 actionset1:
     echo Executing actionset1
+    echoFailedcommandexample
+
 
