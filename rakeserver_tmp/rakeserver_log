@@ -1,11 +1,16 @@
 ### rakeserver Log ###
 
-(05/05/2022 16:15:13) Appending to existing server log.
-(05/05/2022 16:15:13) Recieved command request from 'rakep'.
-(05/05/2022 16:15:13) [1] > echo Executing actionset1
-(05/05/2022 16:15:13) [1] Executed successfully.
-stdout: Executing actionset1
+(05/05/2022 17:54:34) Appending to existing server log.
+(05/05/2022 17:54:34) Recieved command request from 'rakep'.
+(05/05/2022 17:54:34) Recieved command request from 'rakep'.
+(05/05/2022 17:54:34) Recieved command request from 'rakep'.
 
-(05/05/2022 16:15:13) Recieved command request from 'rakep'.
-(05/05/2022 16:15:13) [2] > echoFailedcommandexample
-(05/05/2022 16:15:13) [2] Execution failed.
+(05/05/2022 18:00:52) Appending to existing server log.
+(05/05/2022 18:00:52) Recieved command request from 'rakep'.
+(05/05/2022 18:00:52) Recieved command request from 'rakep'.
+(05/05/2022 18:00:52) Recieved command request from 'rakep'.
+
+(05/05/2022 18:12:27) Appending to existing server log.
+(05/05/2022 18:12:27) Recieved command request from 'rakep'.
+(05/05/2022 18:12:27) Recieved command request from 'rakep'.
+(05/05/2022 18:12:27) Recieved command request from 'rakep'.

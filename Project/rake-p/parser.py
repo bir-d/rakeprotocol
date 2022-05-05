@@ -1,15 +1,24 @@
 import os 
 
 class Parser:
-  def __init__(self, path=""):
+  def __init__(self, path="", verbose=False):
     print("[rake.p] Initialising Parser object.")
+
+    # File details
     self.path   = path
     self.curdir = os.getcwd()
+
+    # Connection details
     self.port   = 0
     self.hosts  = list()
     self.actionsets = list()
-    self.readRakefile()
 
+    # Populates details data structures
+    self.readRakefile()
+    if verbose:
+      self.printRakeDetails()
+
+  # Prints all values held in the Parser object.
   def printRakeDetails(self):
     if self.actionsets and self.hosts :
       print("[rake.p] Printing results...")
@@ -25,6 +34,7 @@ class Parser:
     else:
       print("[rake.p] No Rakefile parsed.")
 
+  # Performs parsing, populates data structures of Parser.
   def readRakefile(self):
     if self.path =="": 
       self.path = self.curdir + "/Rakefile"
@@ -63,11 +73,21 @@ class Parser:
             if line.startswith("#") or len(line.strip()) == 0:
               None
             elif line.startswith("PORT  ="):
+              # Default port for hosts with none specified.
               self.port = line.replace("PORT  =","").strip()
             # Line holds HOSTS, which are split and stored as a list.
             elif line.startswith("HOSTS ="):
-              self.hosts = line.replace("HOSTS =","").split() 
-
+              rawHosts = line.replace("HOSTS =","").split() 
+              # Where no port for host specified, the port 
+              #   found above is used. Port details should 
+              #   also be stored along with the name.
+              for host in rawHosts:
+                pair = host.split(":") 
+                if len(pair) == 1:
+                  pair.append(self.port)
+                # self.hosts is list of lists
+                self.hosts.append(pair) # [0] hostname [1] port
+                
             line = f.readline().replace("    ", "\t")
       print("[rake.p] Read completed.\n")
     except:
