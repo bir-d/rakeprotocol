@@ -5,9 +5,13 @@ class Client:
     self.hosts        = rakeData.hosts
     self.actionsets   = rakeData.actionsets
 
-  # is not able to see if the server is busy
+  # Is not able to see if the server is busy
   # simply a naive execution script
-  def requestExecution(self, Executor):
+  # TODO: Rather than pass executor, use self.hosts for
+  #       server addressing
+  def requestExecution(self, Server):
     for i in self.actionsets[0]:
-      Executor.addCommand(i[1], "rakep")
-      Executor.runCommand()
+      # Will eventually not require client hostname,
+      #   as the server will determine this itself.
+      Server.addCommand(i[1], "rakep")
+      Server.runCommand()

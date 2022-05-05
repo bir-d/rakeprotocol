@@ -1,15 +1,13 @@
 import os 
 
-class Rake:
+class Parser:
   def __init__(self, path=""):
-    print("[rake.p] Initialising Rakefile object.")
+    print("[rake.p] Initialising Parser object.")
     self.path   = path
     self.curdir = os.getcwd()
-
     self.port   = 0
     self.hosts  = list()
     self.actionsets = list()
-
     self.readRakefile()
 
   def printRakeDetails(self):
@@ -71,9 +69,7 @@ class Rake:
               self.hosts = line.replace("HOSTS =","").split() 
 
             line = f.readline().replace("    ", "\t")
-
       print("[rake.p] Read completed.\n")
-    
     except:
       return FileNotFoundError("[read.p] Error: No Rakefile found.")
 
