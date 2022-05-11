@@ -1,30 +1,19 @@
-import os 
-import datetime
-import selectors
+# import datetime
+# import subprocess
 import subprocess
+import os 
+import selectors
 import socket
-
-# # Handles information of multiple running servers.
-# class ServerManagement:
-#     def __init__(self, rakeData, v=True):
-#         if v:print(" |-> [serverManager]  Enabled server manager.")
-#         self.hosts      = rakeData.hosts
-#         self.servers    = dict()
-  
-#     def addServer(self, host, ServerObject):
-#         self.servers[host] = ServerObject
-
 
 # Server objects manage execution/handling of client requests. 
 class Server:
-    def __init__(self, rakeFileData, v=True):
+    def __init__(self, host, v=True):
         if v:print(" |-> [server]  Initialised rake server.")
-        self.hosts      = rakeFileData.hosts
-        self.sockets    = list()
+        self.host      = host
         if v:print(" |-> [server]  Server data structures populated successfully.")
 
     def addSocket(self, SocketObject):
-        self.sockets.append(SocketObject)
+        self.socket = SocketObject
 
 # Creates an object from parsed Rakefile information. 
 class Parser:
@@ -143,13 +132,54 @@ class DirectoryNavigator:
 # Handles header file sent to the client.
 class DataTransmission:
     def __init__(self, select, sock, address):
-        self.select = select
-        self.sock = sock
-        self.address = address
-        self._recv_buffer = b""
-        self._send_buffer = b""
-        self.request = None
-        self.response_created = False
+        self.select             = select
+        self.sock               = sock
+        self.address            = address
+        self.receive_buff       = b""
+        self.send_buff          = b""
+        self.request            = None
+        self.response_created   = False
+    
+    def executeCommand(self, command):
+        print(subprocess.check_output(command))
+
+    def readData(self):
+        try:
+            data = self.sock.recv(4096)
+        except BlockingIOError:
+            pass
+        else:
+            if data:
+                self.receive_buff += data
+            else:
+                raise RuntimeError("Peer closed.")
+
+    def writeData(self):
+        if self.request:
+            if not self.response_created:
+                # Binary or unknown content-type
+                response = self._create_response_binary_content()
+                message = self._create_message(response)
+                self.response_created = True
+                self.send_buff += message
+
+        if self.send_buff:
+            print(" |->[write]  Sending '"+self.send_buff+"' to '"+ self.address +"'")
+            try:
+                sent = self.sock.send(self.send_buff)
+            except BlockingIOError:
+                pass
+            else:
+                self.send_buff = self.send_buff[sent:]
+                if sent and not self.send_buff:
+                    self.close()
+
+    def eventHandler(self, mask):
+        if mask & selectors.EVENT_READ:
+            self.read()
+        if mask & selectors.EVENT_WRITE:
+            self.write()
+
 
 # Used for management of socket functionality.
 class SocketHandling:
@@ -183,7 +213,8 @@ class SocketHandling:
 
         self.select.register(connection, selectors.EVENT_READ, data=transmission)
 
-    def awaitServer(self):
+    def awaitClient(self):
+        print(" |-> [socket]  Awaiting client commands...")
         try:
             while True:
                 events = self.select.select(timeout=None)
@@ -193,142 +224,14 @@ class SocketHandling:
                     else:
                         transmission = key.data
                         try:
-                            transmission.process_events(mask)
+                            transmission.eventHandler(mask)
                         except Exception:
                             print(" |-> [socket]  Error: An exception was thrown.")
                             transmission.close()
-
         except KeyboardInterrupt:
-            print(" |-> [socket]  Transmission halted by user. ")
+            print("\n |-> [socket]  Transmission halted by user.")
         finally:
             self.select.close()
-
-# Allows for client-relative dir fun
-
-  #   # Makes directory or uses existing dir.
-  #   dirPath = self.createDir(self.hostname+"_data") 
-
-  #   if dirPath == OSError:
-  #     print("[rakeserver] Terminating server instance. #ERR_MKDIR_HOST")
-  #     exit()
-  #   elif not self.dirExists(dirPath):
-  #     print("[rakeserver] Terminating server instance. #ERR_CHDIR_HOST")
-  #     exit()
-
-  #   # Directory exists, saved and changed into.
-  #   self.hostDir = dirPath
-
-  # # Creates a directory in the 
-  # def createDir(self, dirName):
-  #   try: 
-  #     os.mkdir(dirName)
-  #     print("[rakeserver] Folder '"+dirName+"' created.")
-  #   except FileExistsError:  # Thrown where dir exists
-  #     print("[rakeserver] Folder '"+dirName+"' already exists, using existing folder.")
-  #   except: # Any other errors must halt execution 
-  #     print("[rakeserver] ERROR: Cannot access or create directory.")
-  #     return OSError
-  #   return os.getcwd() + "/" + dirName 
-
-  # # Determines if the directory path exists - relative or absolute.  
-  # def dirExists(self, dirPath):
-  #   if os.path.exists(dirPath) or os.path.exists(os.getcwd()+"/"+dirPath):
-  #     return True
-  #   else:
-  #     print("[rakeserver] ERROR: Failed to find directory '"+dirPath+"'!")
-  #     return False
-
-  # # # Handles the initial onboarding of clients with the server.
-  # # def connectToClient(self, clientName):
-  # #   print("[rakeserver] Received connection request from '"+clientName+"' recieved.")
-  # #   clientDir = self.createDir(clientName)
-
-  #   if clientDir == OSError:
-  #     print("[rakeserver] Terminating server instance. #ERR_MKDIR_HOST")
-  #     return -1
-  #   elif not self.dirExists(clientDir):
-  #     print("[rakeserver] Terminating connection to client. #ERR_CHDIR_CLIENT")
-  #     return -1
-
-  #   os.chdir(clientDir)
-  #   print("[rakeserver] Creating log file for '"+clientName+"'...")
-  #   try: 
-  #     log = open(clientName+"_tmp", "x")
-  #     log.write("### "+clientName+" Log ###\n")
-  #     log.write("\n" + self.timestamp()+" Log created.\n")
-      
-  #     print("[rakeserver] Created file successfully.\n")
-  #   except FileExistsError: # Log file for client exists already.
-  #     log = open(clientName+"_tmp", "a")
-  #     log.write("\n---\n" + self.timestamp()+" Found existing client log.\n")
-  #     print("[rakeserver] Found existing log for host!\n")
-  #   except:
-  #     print("[rakeserver] ERROR: Cannot create log file or access existing log file.\n")
-  #     return False
-
-  #   self.clients[clientName] = log
-  #   # close log
-
-  #   print("[rakeserver] Connected to client '"+clientName+"'.")
-
-  # def timestamp(self):
-  #   now = datetime.datetime.now()
-  #   date_time = now.strftime("(%m/%d/%Y %H:%M:%S)")
-  #   return date_time	
-
-  # def runCommands(self):
-  #   if len(self.queue) >= 0:
-  #     command = self.queue.pop(0)
-  #     self.log.write(self.timestamp()+ " > "+command+"\n")
-  #     try:
-  #       exec = subprocess.check_output([command], shell=True, stderr=subprocess.STDOUT, text=True)
-  #       self.log.write(self.timestamp()+" Executed successfully.\n")
-  #       self.log.write("stdout: \n\t'" + exec + "'\n")
-  #     except subprocess.CalledProcessError as error:
-  #       self.log.write(self.timestamp()+" Execution failed: returned non-zero execution status.\n")
-  #       print(repr(error))
-  #       self.log.write("stderr:"+repr(error)) # this is the PYTHON error not stdout
-  #     print("[rakeserver] Executed command.")
-
-  #     self.commandID+=1
-
-  #     # Calls self until queue full, then halts execution: this code is
-  #     #   trying to demonstrate that the queue is checked again at the
-  #     #   end of executing each command. In reality, this still doesn't
-  #     #   do this, but hey... it's a start :)
-  #     self.runCommands() 
-  #   else:
-  #     print("[rakeserver] Queue contains no commands to execute.")
-      
-  # def getExecutionCost(self):
-  #   return len(self.queue)
-
-  # def getClientDirPath(self, clientName):
-  #   currentDir = os.getcwd()
-  #   path = currentDir.split("/")
-
-  #   if path[-1]   == self.hostname: # CD = host directory
-  #     return currentDir+ "/" + clientName
-  #   elif path[-1] == clientName:    # CD = client directory
-  #     return currentDir 
-  #   elif self.hostname in path:     # CD has the hostname in it's path 
-  #     # TODO: Check that just not a dir with same name as host.
-  #     index = path.indexOf(self.hostname)
-  #     return '/'+ "/".join(path[:index+1])+ "/" + clientName 
-  #   else:
-  #     return OSError
-
-  # def addCommand(self, command, clientName):
-  #   clientPath = self.getClientDirPath(clientName)
-  #   if clientPath != OSError:
-  #     os.chdir(clientPath)
-  #     self.clientLogs[clientName].write(self.timestamp()+" Recieved command request.\n")
-  #     self.queue.append(command)
-  #     print("[rakeserver] Command added to execution queue.")
-  #   else:
-  #     print("[rakeserver] ERROR: Failed to add command to queue of host'"+self.hostname+"'.")
-  #     return -1
-  #   return len(self.queue) - 1
 
 
 if __name__ == '__main__':

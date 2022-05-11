@@ -1,5 +1,6 @@
 import os
 import socket
+import subprocess
 import selectors
 
 # Client objects manage connections to servers in the Rakefile.
@@ -131,16 +132,58 @@ class DirectoryNavigator:
         return self.defaultPath + host + "_tmp"
 
 # Handles header file sent to the server.
+# Handles header file sent to the client.
 class DataTransmission:
     def __init__(self, select, sock, address):
-        self.select = select
-        self.sock = sock
-        self.address = address
-        self._recv_buffer = b""
-        self._send_buffer = b""
-        self.request = None
-        self.response_created = False
+        self.select             = select
+        self.sock               = sock
+        self.address            = address
+        self.receive_buff       = b""
+        self.send_buff          = b""
+        self.request            = None
+        self.response_created   = False
+    
+    def executeCommand(self, command):
+        print(subprocess.check_output(command))
 
+    def readData(self):
+        try:
+            data = self.sock.recv(4096)
+        except BlockingIOError:
+            pass
+        else:
+            if data:
+                self.receive_buff += data
+            else:
+                raise RuntimeError("Peer closed.")
+
+    def writeData(self):
+        if self.request:
+            if not self.response_created:
+                # Binary or unknown content-type
+                response = self._create_response_binary_content()
+                message = self._create_message(response)
+                self.response_created = True
+                self.send_buff += message
+
+        if self.send_buff:
+            print(" |->[write]  Sending '"+self.send_buff+"' to '"+ self.address +"'")
+            try:
+                sent = self.sock.send(self.send_buff)
+            except BlockingIOError:
+                pass
+            else:
+                self.send_buff = self.send_buff[sent:]
+                if sent and not self.send_buff:
+                    self.close()
+
+    def eventHandler(self, mask):
+        if mask & selectors.EVENT_READ:
+            self.read()
+        if mask & selectors.EVENT_WRITE:
+            self.write()
+
+import types
 # Used for management of socket functionality.
 class SocketHandling:
     # Create a socket to communicate to server.
@@ -151,48 +194,89 @@ class SocketHandling:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt( socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         print(" |-> [socket]  Successfully created socket.\n |")
+        
+        self.startConnection()
 
-    
-    # Enable listening to the socket for communication.
-    def initiateListening(self):
-        print(" |-> [socket]  Enabling socket listening.")
-        self.sock.bind((self.HOST, self.PORT))
-        self.sock.listen()    
-        self.sock.setblocking(False)
-        self.select.register(self.sock, selectors.EVENT_READ, data=None)
+    def startConnection(self):
+        server_addr = (self.HOST, self.PORT)
+        command = "echo hie"
+        print(f"Starting connection to {server_addr}")
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setblocking(False)
+        sock.connect_ex(server_addr)
+        events = selectors.EVENT_READ | selectors.EVENT_WRITE
 
-        print(" |-> [socket]  Listening on '" + self.HOST + ":" + str(self.PORT) + "' enabled!")
+        data = types.SimpleNamespace(
+            # msg_total=sum(len(m) for m in command),
+            recv_total=0,
+            # messages=command.copy(),
+            outb=b"",
+        )
+        self.select.register(sock, events, data=data)
 
-    def acceptConnection(self, sock):
-        connection, address = sock.accept()  
-        connection.setblocking(False)
-        print(" |-> [socket]  Accepted connection from '" + address + "'.")
+    def serviceConnection(self, key, mask):
+        sock = key.fileobj
+        data = key.data
+        if mask & selectors.EVENT_READ:
+            recv_data = sock.recv(1024)  # Should be ready to read
+            if recv_data:
+                print(f"Received {recv_data!r} from connection {data.connid}")
+                data.recv_total += len(recv_data)
+            if not recv_data or data.recv_total == data.msg_total:
+                print(f"Closing connection {data.connid}")
+                self.select.unregister(sock)
+                sock.close()
+        if mask & selectors.EVENT_WRITE:
+            if not data.outb and data.messages:
+                data.outb = data.messages.pop(0)
+            if data.outb:
+                print(f"Sending {data.outb!r} to connection {data.connid}")
+                sent = sock.send(data.outb)  # Should be ready to write
+                data.outb = data.outb[sent:]
 
-        transmission = DataTransmission(self.select, connection, address)
-        print(" |-> [socket]  Prepared data for transmission.")
-
-        self.select.register(connection, selectors.EVENT_READ, data=transmission)
-
-    def awaitServer(self):
+    def awaitClient(self):
+        print(" |-> [socket]  Awaiting client commands...")
         try:
             while True:
                 events = self.select.select(timeout=None)
-                for key, mask in events:
-                    if key.data is None:
-                        self.acceptConnection(key.fileobj)
-                    else:
-                        transmission = key.data
-                        try:
-                            transmission.process_events(mask)
-                        except Exception:
-                            print(" |-> [socket]  Error: An exception was thrown.")
-                            transmission.close()
-
+                if events:
+                    for key, mask in events:
+                        self.serviceConnection(key, mask)
+                if not self.select.get_map():
+                    break
+                        # if key.data is None:
+                        #     self.acceptConnection(key.fileobj)
+                        # else:
+                        #     transmission = key.data
+                        #     try:
+                        #         transmission.eventHandler(mask)
+                        #     except Exception:
+                        #         print(" |-> [socket]  Error: An exception was thrown.")
+                        #         transmission.close()
         except KeyboardInterrupt:
-            print(" |-> [socket]  Transmission halted by user. ")
+            print("\n |-> [socket]  Transmission halted by user.")
         finally:
             self.select.close()
 
+    # # Enable listening to the socket for communication.
+    # def initiateListening(self):
+    #     print(" |-> [socket]  Enabling socket listening.")
+    #     self.sock.bind((self.HOST, self.PORT))
+    #     self.sock.listen()    
+    #     self.sock.setblocking(False)
+    #     self.select.register(self.sock, selectors.EVENT_READ, data=None)
+
+    #     print(" |-> [socket]  Listening on '" + self.HOST + ":" + str(self.PORT) + "' enabled!")
+
+    # def acceptConnection(self, sock):
+    #     connection, address = sock.accept()  
+    #     connection.setblocking(False)
+    #     print(" |-> [socket]  Accepted connection from '" + address + "'.")
+
+    #     transmission = DataTransmission(self.select, connection, address)
+    #     print(" |-> [socket]  Prepared data for transmission.")
+
+    #     self.select.register(connection, selectors.EVENT_READ, data=transmission)
 if __name__ == '__main__':
   print("ERROR: Incorrect file run. \nPlease run 'client.py'; file 'client_library.py' is a module only.")
   exit()
