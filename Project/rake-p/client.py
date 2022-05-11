@@ -1,41 +1,59 @@
-class Client: 
-  def __init__(self, rakeData):
-    print("[rake.p] Initialised Python rake client.\n")
-    self.port         = rakeData.port
-    self.hosts        = rakeData.hosts
-    self.actionsets   = rakeData.actionsets
+''' 
+TODO: Implement multiple client management.
+- Requires refactoring of how Client objects function/what they store.
+- Initially single client for simplicity 
+'''
 
-  # def pollHosts(self):
-  #   availableHosts = list()
-  #   for host in self.hosts:
-  #     # if host is not busy:
-  #     availableHosts.append(host)
-  #   return availableHosts
+import socket
+import os
+import sys
 
-  # Connect client to host; currently naive.
-  # TODO: Implement hostname/port connection.
-  def connectToHost(self, Server):
-    Server.connectToClient('rakep')
-    print("[rake.p] Connected to host '"+Server.hostname+"'.")
-    self.Server = Server
+from client_library import Parser, Client, DirectoryNavigator, SocketHandling
 
-  # Finds an available host to execute on.
-  def executeActionsets(self):
-    for actionset in self.actionsets:
-      availableHosts = self.pollHosts()
-      while len(availableHosts) > 0:
-        command = actionset.pop(0)
-        host    = availableHosts.pop(0)
-        # send command to host (hostname probably passed to server?)
-        # how do we wait for results?
+if __name__ == '__main__':
+  defaultRakefilePath = "/".join(os.getcwd().split("/")[:-1]) \
+                          + "/Rakefile"
 
-  # CURRENTLY AN EXTREMELY NAIVE, DEMONSTRATIVE FUNCTION 
-  # TODO: Implement host routing for commands based on lowest execution cost. 
-  # TODO: Move running of command to the Server code, rather than client.
-  def requestExecution(self):
-    try:
-      for command in self.actionsets[0]:
-        self.Server.addCommand(command, "rakep")
-    except:
-      print("[rake.p] ERROR: Could not connect to server.")
+  print("[r.p]\tSearching for Rakefile...")
+  try:
+    RakefilePath    = sys.argv[1]
+    print("[r.p]\tUsing path given to find Rakefile.")
+  except IndexError:
+    print("[r.p]\tNo Rakefile specified, using default path.")
+    RakefilePath    = defaultRakefilePath
+  except:
+    print("[r.p]\tRakefile not found at path: \n\t'"+sys.argv[1]+"'")
+    exit()
+  
+  # Extract information from Rakefile.
+  rakefileData  = Parser(RakefilePath)
 
+  # print("\n[r.p]\tInitiating client management.")
+  # ClientManager = ClientManagement(rakefileData)
+
+  # Uses Parser object to populate client data.
+  print("\n[r.p]\tInstantiating client.")
+  rakeClient   = Client(rakefileData)
+
+  print("\n[r.p]\tCreating tmp directories for each host.")
+  dirNav = DirectoryNavigator(os.getcwd())
+  for host in rakeClient.hosts:
+    dirNav.createDir(host + "_tmp")
+
+  print("\n[r.p]\tEstablishing sockets for communication with hosts.")
+  for host in rakeClient.hosts:
+    host, port = host.split(":")
+    socket = SocketHandling(host, int(port))
+    socket.initiateListening()
+    rakeClient.addSocket(socket)
+
+
+
+  # Starts the server using it's hostname.
+  # rakeserver  = Server("rakeserver")
+  
+  # Checks for available servers, requesting actionset,
+  #   exectution or queuing commands to server which
+  #   has the smallest queue size (not currently implemented).
+  # rakep.connectToHost(rakeserver)
+  # rakep.requestExecution()
