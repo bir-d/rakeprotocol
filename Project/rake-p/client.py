@@ -20,6 +20,7 @@ if __name__ == '__main__':
     print("[r.p]\tUsing path given to find Rakefile.")
   except IndexError:
     print("[r.p]\tNo Rakefile specified, using default path.")
+    print("\n"+defaultRakefilePath+"\n")
     RakefilePath    = defaultRakefilePath
   except:
     print("[r.p]\tRakefile not found at path: \n\t'"+sys.argv[1]+"'")
@@ -28,32 +29,29 @@ if __name__ == '__main__':
   # Extract information from Rakefile.
   rakefileData  = Parser(RakefilePath)
 
-  # print("\n[r.p]\tInitiating client management.")
-  # ClientManager = ClientManagement(rakefileData)
-
   # Uses Parser object to populate client data.
   print("\n[r.p]\tInstantiating client.")
   rakeClient   = Client(rakefileData)
 
-  print("\n[r.p]\tCreating tmp directories for each host.")
+  print("\n[r.p]\tCreating tmp directories for each server.")
   dirNav = DirectoryNavigator(os.getcwd())
   for host in rakeClient.hosts:
     dirNav.createDir(host + "_tmp")
 
+
   print("\n[r.p]\tEstablishing sockets for communication with hosts.")
-  for host in rakeClient.hosts:
-    host, port = host.split(":")
+  for hostname in rakeClient.hosts:
+    host, port = hostname.split(":")
     socket = SocketHandling(host, int(port))
-    socket.initiateListening()
-    rakeClient.addSocket(socket)
+    rakeClient.addSocket(hostname, socket)
 
+  # From here, code is unstable and incomplete.
+  print("\n\n----[DEBUG]----\n")
+  print("\n[r.p]\tSending command.")
 
-
-  # Starts the server using it's hostname.
-  # rakeserver  = Server("rakeserver")
-  
-  # Checks for available servers, requesting actionset,
-  #   exectution or queuing commands to server which
-  #   has the smallest queue size (not currently implemented).
-  # rakep.connectToHost(rakeserver)
-  # rakep.requestExecution()
+  commandTest = rakeClient.actionsets[0][0]
+  socketTest  = rakeClient.sockets["127.0.0.1:6238"]
+  socketTest.connect(commandTest)
+  socketTest.awaitServer()
+    # socket.initiateListening()
+    # rakeClient.addSocket(socket)

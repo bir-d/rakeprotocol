@@ -9,11 +9,11 @@ class Client:
         self.port         = rakeData.port
         self.hosts        = rakeData.hosts
         self.actionsets   = rakeData.actionsets
-        self.sockets      = list()
+        self.sockets      = dict()
         if v:print(" |-> [client]  Client data structures populated successfully.")
 
-    def addSocket(self, SocketObject):
-        self.sockets.append(SocketObject)
+    def addSocket(self, host, SocketObject):
+        self.sockets[host] = SocketObject
 
 # Creates an object from parsed Rakefile information. 
 class Parser:
@@ -73,16 +73,16 @@ class Parser:
                     line = f.readline().replace("    ", "\t") 
 
                     if line.startswith("\t\t"):   # Requirement lines use two tab characters.
-                    # Add requirements as list to the end of the command list.
+                        # Add requirements as list to the end of the command list.
                         command.append( line.replace("\t\trequires ", "").split() ) 
                         line = f.readline().replace("    ", "\t")
-                    else:                         # No requirements for above command.
+                    else:   # No requirements for above command.
                         # Append empty list of requirements to the end of command list.
                         command.append( [] )
                         commands.append(command)  # Adds command above to current ACTIONSET commands.
                 self.actionsets.append(commands) # Adds commands of ACTIONSET to list of ACTIONSETS.
             else:
-                # Line holds PORT number, which is stored as an integer.
+                # Line holds port number, which is stored as an integer.
                 if line.startswith("#") or len(line.strip()) == 0:
                     None
                 elif line.startswith("PORT  ="):
@@ -113,7 +113,7 @@ class DirectoryNavigator:
 
     # Creates a directory in current working directory.
     def createDir(self, dirName):
-        print(" |-> [dirNav]  Creating '" + dirName+ "' in CD.")
+        print(" |-> [dirNav]  Creating '" + dirName + "' in CD.")
         try: 
             os.mkdir(dirName)
             print(" |-> [dirNav]  Successfully created directory.")
@@ -131,63 +131,115 @@ class DirectoryNavigator:
         return self.defaultPath + host + "_tmp"
 
 # Handles header file sent to the server.
-class DataTransmission:
-    def __init__(self, select, sock, address):
+class Message:
+    def __init__(self, select, sock, address, command):
         self.select = select
         self.sock = sock
         self.address = address
+        self.command = command
         self._recv_buffer = b""
         self._send_buffer = b""
-        self.request = None
-        self.response_created = False
+        self._command_queued = False
+        self.response = None
+
+    def process_events(self, mask):
+        if mask & selectors.EVENT_READ:
+            self.read()
+        if mask & selectors.EVENT_WRITE:
+            self.write()
+
+    def read(self):
+        try:
+            # Should be ready to read
+            data = self.sock.recv(4096)
+        except BlockingIOError:
+            pass
+        else:
+            if data:
+                self._recv_buffer += data
+            else:
+                raise RuntimeError("Peer closed.")
+
+    def write(self):
+        if not self._command_queued:
+            self.queue_command()
+
+        '''_write()'''
+        if self._send_buffer:
+            print(f"Sending {self._send_buffer!r} to {self.address}")
+            try:
+                # Should be ready to write
+                sent = self.sock.send(self._send_buffer)
+            except BlockingIOError:
+                # Resource temporarily unavailable (errno EWOULDBLOCK)
+                pass
+            else:
+                self._send_buffer = self._send_buffer[sent:]
+
+        if self._command_queued:
+            if not self._send_buffer:
+                # Set selector to listen for read events, we're done writing.
+                self._set_selector_events_mask("r")
+
+    def close(self):
+        print(f"Closing connection to {self.address}")
+        try:
+            self.selector.unregister(self.sock)
+        except Exception as e:
+            print(
+                f"Error: selector.unregister() exception for "
+                f"{self.address}: {e!r}"
+            )
+
+        try:
+            self.sock.close()
+        except OSError as e:
+            print(f"Error: socket.close() exception for {self.address}: {e!r}")
+        finally:
+            # Delete reference to socket object for garbage collection
+            self.sock = None
+
+    def queue_command(self):
+        self._send_buffer += self.message
+        self._command_queued = True
 
 # Used for management of socket functionality.
 class SocketHandling:
     # Create a socket to communicate to server.
-    def __init__(self, HOST, PORT):
-        print(" |-> [socket]  Creating socket for '" + HOST+":" + str(PORT) + "'.")
-        self.HOST, self.PORT = HOST, PORT
+    def __init__(self, host, port):
+        print(" |-> [socket]  Connecting to '" + host+":" + str(port) + "'.")
         self.select = selectors.DefaultSelector()
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.setsockopt( socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        print(" |-> [socket]  Successfully created socket.\n |")
+        self.host, self.port = host, port
 
-    
-    # Enable listening to the socket for communication.
-    def initiateListening(self):
-        print(" |-> [socket]  Enabling socket listening.")
-        self.sock.bind((self.HOST, self.PORT))
-        self.sock.listen()    
-        self.sock.setblocking(False)
-        self.select.register(self.sock, selectors.EVENT_READ, data=None)
+        # self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # self.sock.setsockopt( socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        print(" |-> [socket]  Successfully created socket.")
 
-        print(" |-> [socket]  Listening on '" + self.HOST + ":" + str(self.PORT) + "' enabled!")
+    def connect(self, command):
+        address = (self.host, self.port)
+        print(f"Starting connection to {address}")
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setblocking(False)
+        sock.connect_ex(address)
+        events = selectors.EVENT_READ | selectors.EVENT_WRITE
+        message = Message(self.select, sock, address, command)
+        self.select.register(sock, events, data=message)
 
-    def acceptConnection(self, sock):
-        connection, address = sock.accept()  
-        connection.setblocking(False)
-        print(" |-> [socket]  Accepted connection from '" + address + "'.")
-
-        transmission = DataTransmission(self.select, connection, address)
-        print(" |-> [socket]  Prepared data for transmission.")
-
-        self.select.register(connection, selectors.EVENT_READ, data=transmission)
 
     def awaitServer(self):
+        print(" |-> [socket]  Waiting for server...")
         try:
             while True:
-                events = self.select.select(timeout=None)
+                events = self.select.select(timeout=1)
                 for key, mask in events:
-                    if key.data is None:
-                        self.acceptConnection(key.fileobj)
-                    else:
-                        transmission = key.data
-                        try:
-                            transmission.process_events(mask)
-                        except Exception:
-                            print(" |-> [socket]  Error: An exception was thrown.")
-                            transmission.close()
-
+                    message = key.data
+                    try:
+                        message.process_events(mask)
+                    except:
+                        print(" |-> [socket]  ERROR: An exception occurred.\n")
+                        message.close()
+                if not self.select.get_map():
+                    break
         except KeyboardInterrupt:
             print(" |-> [socket]  Transmission halted by user. ")
         finally:
