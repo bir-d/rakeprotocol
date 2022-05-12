@@ -1,20 +1,68 @@
+from email import header
 import os
 import socket
 import selectors
 import sys
 
+HEADER = 64
+FORMAT = 'utf-8'
+
+def create_dir(dirName, v=True):
+    if v:print(" |-> [mkdir]  Creating '" + dirName+ "' in CD.")
+    try: 
+        os.mkdir(dirName)
+        if v:print(" |-> [mkdir]  Successfully created directory.")
+    except FileExistsError:  # Thrown where dir exists
+        if v:print(" |-> [mkdir]  Directory already exists.")
+    except: # Any other errors must halt execution 
+        print(" |-> [mkdir]   ERROR: Cannot access or create directory.")
+        exit()
+    return os.getcwd() + "/" + dirName 
+
 # Client objects manage connections to servers in the Rakefile.
 class Client: 
     def __init__(self, rakeData, v=True):
-        if v:print(" |-> [client]  Initialised rake.p client.")
-        self.port         = rakeData.port
-        self.hosts        = rakeData.hosts
-        self.actionsets   = rakeData.actionsets
-        self.sockets      = dict()
-        if v:print(" |-> [client]  Client data structures populated successfully.")
+        print(" |-> [client]  Initialised rake.p client.")
+        self.ACTIONSETS             = rakeData.actionsets
+        self.ADDRS, self.SERVERS    = list(), list()
+        self.SOCKETS                = dict()
 
-    def addSocket(self, host, SocketObject):
-        self.sockets[host] = SocketObject
+        for hostname in rakeData.hosts:
+            create_dir(hostname+'_tmp')
+            self.SERVERS.append(hostname)
+            host, port = hostname.split(":")
+            self.ADDRS.append((host, int(port)))
+        print(" |-> [client]  Client data structures populated successfully.")
+
+        print(" |-> [client]  Establishing sockets for communication with hosts.")
+        for ADDR in self.ADDRS:
+            self.connect_to_socket(ADDR)
+
+    def connect_to_socket(self, ADDR):
+        SERVER = f"{ADDR[0]}:{ADDR[1]}"
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.SOCKETS[SERVER] = sock
+        sock.connect(ADDR)
+        print(f" |-> [socket]  Opened and connected to socket at {SERVER}.")
+
+    def send_message(self, sock, message):
+        print(" |-> [send]  Sending message to server.")
+        msg = message.encode(FORMAT)
+        msg_len = len(msg)
+        send_len = str(msg_len).encode(FORMAT)
+        send_len += b' ' * (HEADER - len(send_len))
+        sock.send(send_len)
+        sock.send(msg)
+        
+        # revise this line
+        print(" |-> [read]  Getting Server response.\n")
+        print(sock.recv(2048).decode(FORMAT))
+
+
+    def DEBUG_send(self, message):
+        sock = self.SOCKETS[self.SERVERS[0]]
+        self.send_message(sock, message)
+        
 
 # Creates an object from parsed Rakefile information. 
 class Parser:
@@ -106,144 +154,6 @@ class Parser:
                     
             line = f.readline().replace("    ", "\t")
         print(" |-> [parser]  Read completed.")
-
-# Allows for client-relative dir functions.
-class DirectoryNavigator:
-    def __init__(self, hostPath):
-        self.defaultPath = hostPath + "/"
-
-    # Creates a directory in current working directory.
-    def createDir(self, dirName):
-        print(" |-> [dirNav]  Creating '" + dirName + "' in CD.")
-        try: 
-            os.mkdir(dirName)
-            print(" |-> [dirNav]  Successfully created directory.")
-            return dirName
-        except FileExistsError:  # Thrown where dir exists
-            print(" |-> [dirNav]  Directory already exists.")
-        except: # Any other errors must halt execution 
-            print(" |-> [dirNav]   ERROR: Cannot access or create directory.")
-            exit()
-
-        return os.getcwd() + "/" + dirName 
-
-    # Get the path for a given host's temp directory.
-    def getPath(self, host):
-        return self.defaultPath + host + "_tmp"
-
-# Handles header file sent to the server.
-class Message:
-    def __init__(self, select, sock, address, command):
-        self.select = select
-        self.sock = sock
-        self.address = address
-        self.command = command
-        self._recv_buffer = b""
-        self._send_buffer = b""
-        self._command_queued = False
-        self.response = None
-
-    def process_events(self, mask):
-        if mask & selectors.EVENT_READ:
-            self.read()
-        if mask & selectors.EVENT_WRITE:
-            self.write()
-
-    def read(self):
-        try:
-            # Should be ready to read
-            data = self.sock.recv(4096)
-        except BlockingIOError:
-            pass
-        else:
-            if data:
-                self._recv_buffer += data
-            else:
-                raise RuntimeError("Peer closed.")
-
-    def write(self):
-        if not self._command_queued:
-            self.queue_command()
-
-        '''_write()'''
-        if self._send_buffer:
-            print(f"Sending {self._send_buffer!r} to {self.address}")
-            try:
-                # Should be ready to write
-                sent = self.sock.send(self._send_buffer)
-            except BlockingIOError:
-                # Resource temporarily unavailable (errno EWOULDBLOCK)
-                pass
-            else:
-                self._send_buffer = self._send_buffer[sent:]
-
-        if self._command_queued:
-            if not self._send_buffer:
-                # Set selector to listen for read events, we're done writing.
-                self._set_selector_events_mask("r")
-
-    def close(self):
-        print(f"Closing connection to {self.address}")
-        try:
-            self.select.unregister(self.sock)
-        except Exception as e:
-            print(
-                f"Error: selector.unregister() exception for "
-                f"{self.address}: {e!r}"
-            )
-        try:
-            self.sock.close()
-        except OSError as e:
-            print(f"Error: socket.close() exception for {self.address}: {e!r}")
-        finally:
-            # Delete reference to socket object for garbage collection
-            self.sock = None
-
-    def queue_command(self):
-        self._send_buffer += self.message
-        self._command_queued = True
-
-# Used for management of socket functionality.
-class SocketHandling:
-    # Create a socket to communicate to server.
-    def __init__(self, host, port):
-        print(" |-> [socket]  Connecting to '" + host+":" + str(port) + "'.")
-        self.select = selectors.DefaultSelector()
-        self.host, self.port = host, port
-
-        # self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # self.sock.setsockopt( socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        print(" |-> [socket]  Successfully created socket.")
-
-    def connect(self, command):
-        address = (self.host, self.port)
-        print(f"Starting connection to {address}")
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.setblocking(False)
-        sock.connect_ex(address)
-        events = selectors.EVENT_READ | selectors.EVENT_WRITE
-        message = Message(self.select, sock, address, command)
-        self.select.register(sock, events, data=message)
-
-
-    def awaitServer(self):
-        print(" |-> [socket]  Waiting for server...")
-        try:
-            while True:
-                events = self.select.select(timeout=1)
-                for key, mask in events:
-                    message = key.data
-                    try:
-                        message.process_events(mask)
-                    except Exception as e:
-                        print(" |-> [socket]  ERROR: An exception occurred.\n\n",e,"\n", sep="")
-                        message.close()
-                if not self.select.get_map():
-                    break
-        except KeyboardInterrupt:
-            print(" |-> [socket]  Transmission halted by user. ")
-        finally:
-            self.select.close()
 
 if __name__ == '__main__':
   print("ERROR: Incorrect file run. \nPlease run 'client.py'; file 'client_library.py' is a module only.")

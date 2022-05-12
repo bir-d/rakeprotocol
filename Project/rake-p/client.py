@@ -1,8 +1,7 @@
 import socket
 import os
 import sys
-from client_library import Parser, Client, DirectoryNavigator, SocketHandling
-
+import client_library 
 
 if __name__ == '__main__':
   # sys.stdout = open('client_log.dat', 'w')
@@ -21,32 +20,17 @@ if __name__ == '__main__':
     exit()
   
   # Extract information from Rakefile.
-  rakefileData  = Parser(RakefilePath)
+  rakefileData  = client_library.Parser(RakefilePath)
 
   # Uses Parser object to populate client data.
   print("\n[r.p]\tInstantiating client.")
-  rakeClient   = Client(rakefileData)
+  client   = client_library.Client(rakefileData)
 
-  print("\n[r.p]\tCreating tmp directories for each server.")
-  dirNav = DirectoryNavigator(os.getcwd())
-  for host in rakeClient.hosts:
-    dirNav.createDir(host + "_tmp")
+  # FOLLOWING ONLY WORKS FOR ONE SERVER
+  #   - NO MULTICLIENT ABILITY
+  #   - NO MULTISERVER ABILITY
+  #   - NO COST CALCULATION
+  client.DEBUG_send("Test.")
 
 
-  print("\n[r.p]\tEstablishing sockets for communication with hosts.")
-  for hostname in rakeClient.hosts:
-    host, port = hostname.split(":")
-    socket = SocketHandling(host, int(port))
-    rakeClient.addSocket(hostname, socket)
-
-  # From here, code is unstable and incomplete.
-  print("\n#########################\n---------[DEBUG]---------\n#########################")
-  print("\n[r.p]\tSending command.")
-
-  commandTest = rakeClient.actionsets[0][0]
-  socketTest  = rakeClient.sockets["127.0.0.1:6238"]
-  socketTest.connect(commandTest)
-  socketTest.awaitServer()
-
-  # sys.stdout.close()
   
