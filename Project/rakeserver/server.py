@@ -1,10 +1,3 @@
-''' 
-TODO: Implement multiple server management.
-- Requires refactoring of how Server objects function/what they store.
-- Initially single server for simplicity 
-'''
-
-
 import socket
 import sys
 import os

@@ -1,0 +1,42 @@
+[r.p]	Searching for Rakefile...
+[r.p]	No Rakefile specified, using default path.
+ |
+ |	/Users/jamiemccullough/Library/Mobile Documents/com~apple~CloudDocs/Documents/University/Semesters/2022-s1/Networks Project/Project/Rakefile
+ |
+ |-> [parser]  Reading Rakefile...
+ |-> [parser]  Read completed.
+ |-> [parser]  Printing results...
+ |
+ |	PORT: 6238
+ |	HOSTS: ['127.0.0.1:6238']
+ |	actionset1
+ |	  0 ['local', 'echo Executing command 1', []]
+ |	  1 ['local', 'echoFailedcommandexample', []]
+ |	  2 ['local', 'echo Executing command 2', []]
+ |
+ |-> [parser]  Completed result printing.
+
+[r.p]	Instantiating client.
+ |-> [client]  Initialised rake.p client.
+ |-> [client]  Client data structures populated successfully.
+
+[r.p]	Creating tmp directories for each server.
+ |-> [dirNav]  Creating '127.0.0.1:6238_tmp' in CD.
+ |-> [dirNav]  Directory already exists.
+
+[r.p]	Establishing sockets for communication with hosts.
+ |-> [socket]  Connecting to '127.0.0.1:6238'.
+ |-> [socket]  Successfully created socket.
+
+#########################
+---------[DEBUG]---------
+#########################
+
+[r.p]	Sending command.
+Starting connection to ('127.0.0.1', 6238)
+ |-> [socket]  Waiting for server...
+ |-> [socket]  ERROR: An exception occurred.
+
+Closing connection to ('127.0.0.1', 6238)
+Error: selector.unregister() exception for ('127.0.0.1', 6238): AttributeError("'Message' object has no attribute 'selector'")
+ |-> [socket]  Transmission halted by user. 

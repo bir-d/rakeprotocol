@@ -1,6 +1,7 @@
 import os
 import socket
 import selectors
+import sys
 
 # Client objects manage connections to servers in the Rakefile.
 class Client: 
@@ -184,13 +185,12 @@ class Message:
     def close(self):
         print(f"Closing connection to {self.address}")
         try:
-            self.selector.unregister(self.sock)
+            self.select.unregister(self.sock)
         except Exception as e:
             print(
                 f"Error: selector.unregister() exception for "
                 f"{self.address}: {e!r}"
             )
-
         try:
             self.sock.close()
         except OSError as e:
@@ -235,8 +235,8 @@ class SocketHandling:
                     message = key.data
                     try:
                         message.process_events(mask)
-                    except:
-                        print(" |-> [socket]  ERROR: An exception occurred.\n")
+                    except Exception as e:
+                        print(" |-> [socket]  ERROR: An exception occurred.\n\n",e,"\n", sep="")
                         message.close()
                 if not self.select.get_map():
                     break

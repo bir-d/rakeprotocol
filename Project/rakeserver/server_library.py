@@ -1,7 +1,5 @@
 import os 
-import datetime
 import selectors
-import subprocess
 import socket
 
 # Server objects manage execution/handling of client requests. 
@@ -75,7 +73,8 @@ class SocketHandling:
     def acceptConnection(self, sock):
         connection, address = sock.accept()  
         connection.setblocking(False)
-        print(" |-> [socket]  Accepted connection from '" + address + "'.")
+        
+        print(" |-> [socket]  Accepted connection from '" +address[0] + str(address[1]) + "'.")
 
         transmission = DataTransmission(self.select, connection, address)
         print(" |-> [socket]  Prepared data structure.")

@@ -1,18 +1,12 @@
-''' 
-TODO: Implement multiple client management.
-- Requires refactoring of how Client objects function/what they store.
-- Initially single client for simplicity 
-'''
-
 import socket
 import os
 import sys
-
 from client_library import Parser, Client, DirectoryNavigator, SocketHandling
 
+
 if __name__ == '__main__':
-  defaultRakefilePath = "/".join(os.getcwd().split("/")[:-1]) \
-                          + "/Rakefile"
+  # sys.stdout = open('client_log.dat', 'w')
+  defaultRakefilePath = "/".join(os.getcwd().split("/")[:-1]) + "/Rakefile"
 
   print("[r.p]\tSearching for Rakefile...")
   try:
@@ -20,7 +14,7 @@ if __name__ == '__main__':
     print("[r.p]\tUsing path given to find Rakefile.")
   except IndexError:
     print("[r.p]\tNo Rakefile specified, using default path.")
-    print("\n"+defaultRakefilePath+"\n")
+    print(" |\n |\t"+defaultRakefilePath+"\n |")
     RakefilePath    = defaultRakefilePath
   except:
     print("[r.p]\tRakefile not found at path: \n\t'"+sys.argv[1]+"'")
@@ -46,12 +40,13 @@ if __name__ == '__main__':
     rakeClient.addSocket(hostname, socket)
 
   # From here, code is unstable and incomplete.
-  print("\n\n----[DEBUG]----\n")
+  print("\n#########################\n---------[DEBUG]---------\n#########################")
   print("\n[r.p]\tSending command.")
 
   commandTest = rakeClient.actionsets[0][0]
   socketTest  = rakeClient.sockets["127.0.0.1:6238"]
   socketTest.connect(commandTest)
   socketTest.awaitServer()
-    # socket.initiateListening()
-    # rakeClient.addSocket(socket)
+
+  # sys.stdout.close()
+  
