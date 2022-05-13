@@ -1,10 +1,10 @@
 {
 	"folders": [
 		{
-			"path": "."
+			"path": "../refactor"
 		},
 		{
-			"path": "../rake-p"
+			"path": "../jamienotes/method3"
 		}
 	],
 	"settings": {}

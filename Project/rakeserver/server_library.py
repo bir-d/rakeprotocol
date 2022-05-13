@@ -58,9 +58,7 @@ class Server:
     def receive_message(self, socket, bytes):
         print("> Receiving message.")
         try: 
-            print("x")
             message = socket.recv(bytes)        # reads all message, but will change
-            print(message)
             message = message.decode("utf-8")
 
             msg_len = len(message)

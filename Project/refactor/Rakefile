@@ -1,0 +1,13 @@
+# Comment 
+# Comment 2
+# Comment 3
+PORT  = 6238
+HOSTS = localhost
+
+actionset1: 
+    echo Executing command 1
+    echoFailedcommandexample 
+    echo Executing command 2
+
+
+
