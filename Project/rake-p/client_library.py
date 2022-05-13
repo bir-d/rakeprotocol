@@ -1,19 +1,22 @@
-from email import header
 import os
-import socket
-import selectors
 import sys
+import socket
+import select
+# import selectors
 
 HEADER = 64
 FORMAT = 'utf-8'
+DISCONNECT_MESSAGE = "!DISCONNECT".encode(FORMAT)
 
-def create_dir(dirName, v=True):
-    if v:print(" |-> [mkdir]  Creating '" + dirName+ "' in CD.")
+
+# Creates a directory inside the client directory.
+def create_dir(dirName):
+    print(" |-> [mkdir]  Creating '" + dirName+ "' in CD.")
     try: 
         os.mkdir(dirName)
-        if v:print(" |-> [mkdir]  Successfully created directory.")
+        print(" |-> [mkdir]  Successfully created directory.")
     except FileExistsError:  # Thrown where dir exists
-        if v:print(" |-> [mkdir]  Directory already exists.")
+        print(" |-> [mkdir]  Directory already exists.")
     except: # Any other errors must halt execution 
         print(" |-> [mkdir]   ERROR: Cannot access or create directory.")
         exit()
@@ -21,49 +24,93 @@ def create_dir(dirName, v=True):
 
 # Client objects manage connections to servers in the Rakefile.
 class Client: 
-    def __init__(self, rakeData, v=True):
+    def __init__(self, rakefile_data):
         print(" |-> [client]  Initialised rake.p client.")
-        self.ACTIONSETS             = rakeData.actionsets
-        self.ADDRS, self.SERVERS    = list(), list()
+        self.ACTIONSETS             = rakefile_data.actionsets
+        self.ADDRS, self.SERVERS    = list(), rakefile_data.hosts
         self.SOCKETS                = dict()
 
-        for hostname in rakeData.hosts:
+        # Makes dir for hosts; appends (host, port) to ADDRS
+        for hostname in rakefile_data.hosts:
             create_dir(hostname+'_tmp')
-            self.SERVERS.append(hostname)
             host, port = hostname.split(":")
             self.ADDRS.append((host, int(port)))
         print(" |-> [client]  Client data structures populated successfully.")
 
-        print(" |-> [client]  Establishing sockets for communication with hosts.")
-        for ADDR in self.ADDRS:
-            self.connect_to_socket(ADDR)
+        self.nonblocking(self.ADDRS[0][0], self.ADDRS[0][1])
+        # print(" |-> [client]  Establishing sockets for communication with hosts.")
+        # for addr in self.ADDRS:
+        #     self.connect_to_socket(addr[0], addr[1])
 
-    def connect_to_socket(self, ADDR):
-        SERVER = f"{ADDR[0]}:{ADDR[1]}"
+    # Creates and stores IPv4 socket for stream, then connects.
+    #   - Is constant 'connection' okay, or should connection only 
+    #     happen at the moment client sends?
+    def connect_to_socket(self, addr):
+        server = f"{addr[0]}:{addr[1]}"
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.SOCKETS[SERVER] = sock
-        sock.connect(ADDR)
-        print(f" |-> [socket]  Opened and connected to socket at {SERVER}.")
-
-    def send_message(self, sock, message):
-        print(" |-> [send]  Sending message to server.")
+        self.SOCKETS[server] = sock
+        sock.connect(addr)
+        print(f" |-> [socket]  Opened and connected to socket at {server}.")
+        
+    # Sends message to socket at address
+    #   - Do we need both sock and addr parameters to be passed?
+    def send_message(self, sock, addr, message):
+        # print(" |-> [send]  Sending message to server.")
         msg = message.encode(FORMAT)
         msg_len = len(msg)
-        send_len = str(msg_len).encode(FORMAT)
+        send_len = str(len(message)).encode("utf-8")
         send_len += b' ' * (HEADER - len(send_len))
         sock.send(send_len)
         sock.send(msg)
-        
-        # revise this line
-        print(" |-> [read]  Getting Server response.\n")
-        print(sock.recv(2048).decode(FORMAT))
+        # sock.send(DISCONNECT_MESSAGE)
 
+        return len(send_len), msg_len
+
+
+    def nonblocking(self, host, port):
+        print("Connecting...")
+        sock = socket.socket(socket.AF_INET,  socket.SOCK_STREAM)
+        connection = sock.connect_ex((host, port))
+        if connection != 0:
+            print("Failed to connect.")
+            return 0
+
+        sock.setblocking(False)
+        inputs = [sock]
+        outputs = [sock]
+
+        while inputs:
+            print("Waiting...")
+            s_read, s_write, s_error = select.select(inputs, outputs, inputs, 1)
+            
+            for s in s_write:
+                print("Sending...")
+                message = "testMesssage"
+                slen, msg_len = self.send_message(s, (host, port), message)
+                print(f"> Sent {msg_len} bytes ({slen} header).")
+                outputs.remove(s)
+
+            for s in s_read:
+                print("Reading...")
+                data = s.recv(1024).decode("utf-8")
+                print(f"Read '{data}' ({len(data)}).")
+                print("Closing...")
+                s.close()
+                inputs.remove(s)
+                break
+
+            for s in s_error:
+                print("Error occurred.")
+                s_write.remove(s)
+                outputs.remove(s)
+                break
+                
 
     def DEBUG_send(self, message):
         sock = self.SOCKETS[self.SERVERS[0]]
-        self.send_message(sock, message)
+        addr = self.ADDRS[0]
+        self.send_message(sock, addr, message)
         
-
 # Creates an object from parsed Rakefile information. 
 class Parser:
   def __init__(self, path, v=True):
@@ -83,7 +130,7 @@ class Parser:
         print("\n[r.p] Execution ended due to an error.")
         exit()
 
-    if v: self.printRakeDetails()
+    self.printRakeDetails()
 
   # Prints all values held in the Parser object.
   def printRakeDetails(self):

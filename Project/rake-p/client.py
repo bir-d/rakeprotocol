@@ -1,4 +1,3 @@
-import socket
 import os
 import sys
 import client_library 
@@ -30,7 +29,10 @@ if __name__ == '__main__':
   #   - NO MULTICLIENT ABILITY
   #   - NO MULTISERVER ABILITY
   #   - NO COST CALCULATION
-  client.DEBUG_send("Test.")
+  # client.DEBUG_send("Test.")
+  # client.DEBUG_send("!DISCONNECT")
+
+  
 
 
   

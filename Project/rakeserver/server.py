@@ -1,6 +1,4 @@
-import socket
 import sys
-import os
 import server_library
 
 if __name__ == '__main__':
@@ -11,7 +9,8 @@ if __name__ == '__main__':
     # Uses Parser object to populate client data.
     print("\n[r.s]\tServer initiated; executing core functionality.")
     server   = server_library.Server(sys.argv[1], sys.argv[2])
-    server.open_socket()
+    server.nonblocking_start()
+    # server.open_socket()
 
   
 
