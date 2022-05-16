@@ -1,13 +1,17 @@
 # Comment 
 # Comment 2
 # Comment 3
-PORT  = 5000
-HOSTS = 192.168.0.114
+
+PORT  = 5051
+HOSTS = 192.168.0.3
+
 
 actionset1: 
-    echo Executing command 1
-    echoFailedcommandexample 
-    echo Executing command 2
+    python test.py
+        requires test.py 
+    echo 1-test 
 
+actionset2: 
+    remote-echo 2-test 
 
 
