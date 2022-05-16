@@ -3,13 +3,14 @@
 # Comment 3
 
 PORT  = 6501
-HOSTS = 127.0.0.1
+HOSTS = 192.168.0.3
 
 actionset1: 
     echo transferring file...
         requires file
 
 actionset2: 
-    remote-echo transfer completed
+    echo file sent
+    
 
 
