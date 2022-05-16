@@ -42,14 +42,19 @@ class Client:
         print(f" |-> [socket]  Opened and connected to socket at {SERVER}.")
 
     def send(self, socket, type, val=""):
-        if type == Codes.COMMAND_MSG:
-            socket.send(type.encode(Comms.FORMAT))
-            self.send_command(socket, val)
-        elif type == Codes.REQUEST_MSG:
-            socket.send(type.encode(Comms.FORMAT))
-            self.send_requirement(socket, val)
-        elif type == Codes.DISCONN_MSG:
-            socket.send(type.encode(Comms.FORMAT))
+        try:
+            if type == Codes.COMMAND_MSG:
+                socket.send(type.encode(Comms.FORMAT))
+                self.send_command(socket, val)
+            elif type == Codes.REQUEST_MSG:
+                socket.send(type.encode(Comms.FORMAT))
+                self.send_requirement(socket, val)
+            elif type == Codes.DISCONN_MSG:
+                socket.send(type.encode(Comms.FORMAT))
+        except BrokenPipeError as e:
+            pass
+
+
 
     def send_requirement(self, socket, path):
         name = path.split("/")[-1].encode(Comms.FORMAT)
@@ -90,8 +95,6 @@ class Client:
         elif socket.recv(2).decode(Comms.FORMAT) == Codes.FAILURE_RSP:
             print("[r.s] An error occurred in command execution.")
             # halt_execution()
-
-
 
 # Creates an object from parsed Rakefile information. 
 class Parser:
