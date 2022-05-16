@@ -20,7 +20,7 @@ class Server:
     def __init__(self, host, port):
         self.HOST, self.PORT, self.SERVER = host, int(port), f"{host}:{port}"
         self.ADDR = (host, int(port))
-        self.DIRPATH    = create_dir(os.getcwd()) 
+        self.DIRPATH    = os.getcwd() 
 
         self.clients = list()
         self.dirs = dict()
@@ -47,27 +47,21 @@ class Server:
     def manage_connection(self, conn, addr):
         print(f"NEW: {get_hostname(addr)}")
         connected = True
-
+        error = False
         try:
             while connected:
                 msg_type = conn.recv(2).decode(Comms.FORMAT) 
                 if msg_type == Codes.DISCONN_MSG:
+                    print(f"Disconnecting from client at '{get_hostname(addr)}'.")
                     connected = False
-                # Received servable request.
                 else:
                     msg_length = conn.recv(Comms.HEADER).decode(Comms.FORMAT) 
                     msg_length = int(msg_length)
 
                     if msg_type == Codes.COMMAND_MSG:
                         msg = conn.recv(msg_length).decode(Comms.FORMAT) 
-                        try:
-                            self.execute_command(msg, addr)
-                            conn.send(Codes.SUCCEED_RSP.encode(Comms.FORMAT))
-                        except:
-                            conn.send(Codes.FAILURE_RSP.encode(Comms.FORMAT))
-                            connected = False
-
-
+                        self.execute_command(msg, addr, conn)
+                        print(f"[{get_hostname(addr)}] Completed execution.")
                     elif msg_type == Codes.REQUEST_MSG:
                         name_length = conn.recv(Comms.HEADER).decode(Comms.FORMAT) 
                         name_length = int(name_length)
@@ -75,40 +69,58 @@ class Server:
                         msg = conn.recv(msg_length).decode(Comms.FORMAT) 
                         try:
                             self.get_requirement(name, msg, conn, addr)
-                            conn.send(Codes.SUCCEED_RSP.encode(Comms.FORMAT))
                         except:
-                            conn.send(Codes.FAILURE_RSP.encode(Comms.FORMAT))
                             connected = False
-            self.disconnect_client(conn, addr)
+            self.disconnect_client(addr)
         except KeyboardInterrupt:
             print("[r.s]  Transmission halted by user. ")
+        except IOError as e:
+            print(e)
+            raise
         finally:
             conn.close()
 
     def get_requirement(self, name, msg, conn, addr):
         flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
-
         try:
+            os.chdir(self.dirs[get_hostname(addr)])
             file = os.open(name, flags)
         except OSError as error:
             if error.errno == errno.EEXIST:
                 pass
             else: 
-                conn.send(Codes.FAILURE_RSP.encode(Comms.FORMAT))
+                # conn.send(Codes.FAILURE_RSP.encode(Comms.FORMAT))
                 raise
         else:
-            with open(file, 'w') as file:
-                file.write(msg)
-            conn.send(Codes.SUCCEED_RSP.encode(Comms.FORMAT))
+            try:
+                with open(file, 'w') as file:
+                    file.write(msg)
+                # conn.send(Codes.SUCCEED_RSP.encode(Comms.FORMAT))
+            except IOError as e:
+                if e.errno == errno.EPIPE:
+                    pass
+            else:
+                os.chdir(self.DIRPATH)
+            finally:
+                os.chdir(self.DIRPATH)
 
-    def execute_command(self, msg, addr):
+
+    def execute_command(self, msg, addr, conn):
+        print(f"[{addr[0]}:{str(addr[1])}]: > {msg}")
         message = msg.split()
-        print(f"[{addr[0]}:{str(addr[1])}]:\n")
-        with subprocess.Popen(message, stdout=subprocess.PIPE) as proc:
-            print("> "+proc.stdout.read().decode(Comms.FORMAT))
+        try:
+            with subprocess.Popen(message, stdout=subprocess.PIPE) as proc:
+                result = proc.stdout.read()
+                print("stdout: "+ result.decode(Comms.FORMAT))
+            msg_len = len(result)
+            send_len = str(msg_len).encode(Comms.FORMAT)
+            send_len +=  b' ' * (Comms.HEADER - len(send_len))
+            conn.sendall(send_len)
+            conn.sendall(result)
+        except Exception as e:
+            print(e)
 
-    def disconnect_client(self, conn, addr):
-        conn.close()
+    def disconnect_client(self, addr):
         self.clients.remove(get_hostname(addr))
         self.dirs.pop(get_hostname(addr))
 

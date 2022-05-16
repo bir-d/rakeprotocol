@@ -1,3 +1,4 @@
+import errno
 import os
 import socket
 import sys
@@ -5,6 +6,7 @@ import re
 
 class Comms:
     HEADER = 64
+    MAX_LEN = 1024
     FORMAT = 'utf-8'
 
 class Codes:
@@ -17,85 +19,103 @@ class Codes:
 # Client objects manage connections to servers in the Rakefile.
 class Client: 
     def __init__(self, rakeData, v=True):
-        print(" |-> [client]  Initialised rake.p client.")
+        print("[client]  Initialised rake.p client.")
         self.ACTIONSETS             = rakeData.actionsets
         self.ADDRS, self.SERVERS    = list(), list()
         self.SOCKETS                = dict()
+        self.DIRPATH = os.getcwd()
+        self.dirs = dict()
 
         for hostname in rakeData.hosts:
-            create_dir(hostname+'_tmp')
+            self.dirs[hostname] = create_dir(hostname+'_tmp')
             self.SERVERS.append(hostname)
             host, port = hostname.split(":")
             self.ADDRS.append((host, int(port)))
 
-        print(" |-> [client]  Establishing sockets for communication with hosts.")
+        print("[client]  Establishing sockets for communication with hosts.")
         for addr in self.ADDRS:
-            print(f"> {addr}")
             self.connect_to_socket(addr)
-        print(" |-> [client]  Sockets connected.")
+        print("[client]  Sockets connected.")
 
     def connect_to_socket(self, ADDR):
         SERVER = f"{ADDR[0]}:{ADDR[1]}"
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.SOCKETS[SERVER] = sock
-        sock.connect(ADDR)
-        print(f" |-> [socket]  Opened and connected to socket at {SERVER}.")
+        sock.connect_ex(ADDR)
+        print(f"[socket]  Opened and connected to socket at {SERVER}.")
 
-    def send(self, socket, type, val=""):
-        try:
-            if type == Codes.COMMAND_MSG:
-                socket.send(type.encode(Comms.FORMAT))
-                self.send_command(socket, val)
-            elif type == Codes.REQUEST_MSG:
-                socket.send(type.encode(Comms.FORMAT))
-                self.send_requirement(socket, val)
-            elif type == Codes.DISCONN_MSG:
-                socket.send(type.encode(Comms.FORMAT))
-        except BrokenPipeError as e:
-            pass
+    def send(self, socket, type, addr, val):
+        if type == Codes.COMMAND_MSG:
+            try:
+                socket.sendall(type.encode(Comms.FORMAT))
+                self.send_command(socket, val, addr)
+                print(f"[command@{addr}] > {val} ")
 
+            except Exception as e:
+                print(f"Exception occurred while sending a command: {e}")
+                exit()
+        elif type == Codes.REQUEST_MSG:
+            try:
+                socket.sendall(type.encode(Comms.FORMAT))
+                self.send_requirement(socket, val, addr)
+            except Exception as e:
+                print(f"Exception occurred while sending required files: {e}")
+                exit()
+        elif type == Codes.DISCONN_MSG:
+            try:
+                socket.sendall(type.encode(Comms.FORMAT))
+            except Exception as e:
+                print(f"Exception occurred while attempting to disconnect: {e}")
+                exit()
 
-
-    def send_requirement(self, socket, path):
+    def send_requirement(self, socket, path, addr):
         name = path.split("/")[-1].encode(Comms.FORMAT)
+
         name_length = len(name)
         send_name_length = str(name_length).encode(Comms.FORMAT)
         send_name_length += b' ' * (Comms.HEADER - len(send_name_length))
 
         with open(path) as f:
             msg = f.read()
+
         message = msg.encode(Comms.FORMAT)
         msg_length = len(message)
         send_msg_length = str(msg_length).encode(Comms.FORMAT)
         send_msg_length += b' ' * (Comms.HEADER - len(send_msg_length))
 
-        socket.send(send_msg_length)
-        socket.send(send_name_length)
-        socket.send(name)
-        socket.send(message)
-        
-        if socket.recv(2).decode(Comms.FORMAT) == Codes.SUCCEED_RSP:
-            print(f"[r.s] File '{name.decode(Comms.FORMAT)}' received.")
-        elif socket.recv(2).decode(Comms.FORMAT) == Codes.FAILURE_RSP:
-            print("[r.s] An error occurred while receiving.")
+        socket.sendall(send_msg_length)
+        socket.sendall(send_name_length)
+        socket.sendall(name)
+        socket.sendall(message)
 
-    def send_command(self, socket, msg):
+        print(f"[files@{addr}] Sent '{name.decode(Comms.FORMAT)}'.")
+
+
+
+    def send_command(self, socket, msg, addr):
         message = msg.encode(Comms.FORMAT)
         msg_length = len(message)
         send_length = str(msg_length).encode(Comms.FORMAT)
         send_length += b' ' * (Comms.HEADER - len(send_length))
-        socket.send(send_length)
-        socket.send(message)
+        socket.sendall(send_length)
+        socket.sendall(message)
+
+        rec_len = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
+        result = socket.recv(int(rec_len))
+        try:
+            os.chdir(self.dirs[addr])
+            with open("log", 'a') as file:
+                file.write(result.decode(Comms.FORMAT))
+        except IOError as e:
+            if e.errno == errno.EPIPE:
+                pass
+        else:
+            os.chdir(self.DIRPATH)
+        finally:
+            os.chdir(self.DIRPATH)
+
+
         
-        if socket.recv(2).decode(Comms.FORMAT) == Codes.SUCCEED_RSP:
-            print("[r.s] Command executed successfully.")
-            # receive_output_len()
-            # receive_output_message()
-
-        elif socket.recv(2).decode(Comms.FORMAT) == Codes.FAILURE_RSP:
-            print("[r.s] An error occurred in command execution.")
-            # halt_execution()
-
 # Creates an object from parsed Rakefile information. 
 class Parser:
   def __init__(self, path, v=True):
@@ -111,7 +131,7 @@ class Parser:
     try:
         self.readRakefile()
     except:
-        print(" |-> [parser]  Error: No Rakefile found!")
+        print("[parser]  Error: No Rakefile found!")
         print("\n[r.p] Execution ended due to an error.")
         exit()
 
@@ -120,21 +140,21 @@ class Parser:
   # Prints all values held in the Parser object.
   def printRakeDetails(self):
     if self.actionsets and self.hosts :
-      print(" |-> [parser]  Printing results...\n |")
-      print(" |\tPORT:", self.port)
-      print(" |\tHOSTS:", self.hosts)
+      print("[parser]  Printing results...\n|")
+      print("|\tPORT:", self.port)
+      print("|\tHOSTS:", self.hosts)
 
       for actionNum, commands in enumerate(self.actionsets):
-        print(" |\tactionset"+ str(actionNum+1))
+        print("|\tactionset"+ str(actionNum+1))
         for i, command in enumerate(commands):
-          print(" |\t  " + str(i),command)
-      print(" |\n |-> [parser]  Completed result printing.")
+          print("|\t  " + str(i),command)
+      print("|\n[parser]  Completed result printing.")
     else:
-      print(" |-> [parser]  Cannot print; no Rakefile parsed!")
+      print("[parser]  Cannot print; no Rakefile parsed!")
 
   # Performs parsing, populates data structures of Parser.
   def readRakefile(self):
-    print(" |-> [parser]  Reading Rakefile...")
+    print("[parser]  Reading Rakefile...")
     with open(self.path, "r") as f:
         line = f.readline().strip()   # Sets 4 spaces to tab character.
 
@@ -180,17 +200,17 @@ class Parser:
                             pair.append(self.port)
                         self.hosts.append(":".join(pair)) # [0] hostname [1] port
             line = f.readline()
-        print(" |-> [parser]  Read completed.")
+        print("[parser]  Read completed.")
 
 def create_dir(dirName, v=True):
-    if v:print(" |-> [mkdir]  Creating '" + dirName+ "' in CD.")
+    if v:print("[mkdir]  Creating '" + dirName+ "' in CD.")
     try: 
         os.mkdir(dirName)
-        if v:print(" |-> [mkdir]  Successfully created directory.")
+        if v:print("[mkdir]  Successfully created directory.")
     except FileExistsError:  # Thrown where dir exists
-        if v:print(" |-> [mkdir]  Directory already exists.")
+        if v:print("[mkdir]  Directory already exists.")
     except: # Any other errors must halt execution 
-        print(" |-> [mkdir]   ERROR: Cannot access or create directory.")
+        print("[mkdir]   ERROR: Cannot access or create directory.")
         exit()
     return os.getcwd() + "/" + dirName 
 
@@ -203,7 +223,7 @@ if __name__ == '__main__':
     except IndexError:
         rakefile_path    = default_path
         print("[r.p]\tNo Rakefile specified, using default path.")
-        print(f" |\n |\t{default_path}\n |")
+        print(f"|\n|\t{default_path}\n|")
     except:
         print(f"[r.p]\tRakefile not found at path:\n\t'{sys.argv[1]}'")
         exit()
@@ -217,16 +237,18 @@ if __name__ == '__main__':
     client   = Client(rakefileData)
 
     # TESTING
-    test_socket = client.SOCKETS[client.SERVERS[0]]
+    test_addr = client.SERVERS[0]
+    test_socket = client.SOCKETS[test_addr]
 
     for actionset in client.ACTIONSETS:
         for msg in actionset:
             location, command, required = msg[0], msg[1], msg[2]
 
             for file in required:
-                client.send(test_socket, Codes.REQUEST_MSG, file)
-            client.send(test_socket, Codes.COMMAND_MSG, command)
-        client.send(test_socket, Codes.DISCONN_MSG, "")
+                client.send(test_socket, Codes.REQUEST_MSG, test_addr, file)
+            client.send(test_socket, Codes.COMMAND_MSG, test_addr, command)
+    client.send(test_socket, Codes.DISCONN_MSG, test_addr, "")
+    print(f"\nDisconnected from {test_addr}.")
     
     
   
