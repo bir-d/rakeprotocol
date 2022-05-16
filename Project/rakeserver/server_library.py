@@ -31,23 +31,14 @@ class Server:
     def open_socket(self):
         if self.v:print(f" |-> [socket]  Opening and binding socket at {self.ADDR}.")
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # self.sock.setsockopt( socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.bind(self.ADDR)
         self.listen_to_socket()
 
-    # TODO: Handle busy server moments with threads
-    #       - Are threads 'self' or no?
-    #       - What happens on another connection attempt?
     def listen_to_socket(self):
         self.sock.listen()    
-        # self.sock.setblocking(False)
-        # self.select.register(self.sock, selectors.EVENT_READ, data=None)
         print(f" |-> [socket]  Server is now listening on '{self.ADDR}'!")
         while True:
-            # conn is socket, addr is host(ip:port)
-            conn, addr = self.sock.accept() # blocks til connected
-            # conn.setblocking(False)
-            # send socket and host to handle_client()
+            conn, addr = self.sock.accept()
             thread = threading.Thread(target=self.manage_connection, args=(conn, addr))
             thread.start()
 
@@ -58,18 +49,6 @@ class Server:
         connected = True
         try:
             while connected:
-                # events = self.select.select(timeout=None)
-                # for key, mask in events:
-                #   if key.data is None:
-                #       self.acceptConnection(key.fileobj)
-                #   else:
-                #       transmission = key.data
-                #       try:
-                #           transmission.process_events(mask)
-                #       except Exception:
-                #           print(" |-> [socket]  Error: An exception was thrown.")
-                #           transmission.close()
-                ''' blocks til recieve msg from client'''
                 msg_length = conn.recv(HEADER).decode(FORMAT) #  need protocol header
                 if msg_length:
                     msg_length = int(msg_length)

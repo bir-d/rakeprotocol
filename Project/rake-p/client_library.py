@@ -62,6 +62,7 @@ class Client:
     def DEBUG_send(self, message):
         sock = self.SOCKETS[self.SERVERS[0]]
         self.send_message(sock, message)
+        sock.close()
         
 
 # Creates an object from parsed Rakefile information. 
