@@ -1,13 +1,15 @@
 # Comment 
 # Comment 2
 # Comment 3
-PORT  = 6238
-HOSTS = localhost
+
+PORT  = 6501
+HOSTS = 127.0.0.1
 
 actionset1: 
-    echo Executing command 1
-    echoFailedcommandexample 
-    echo Executing command 2
+    echo transferring file...
+        requires file
 
+actionset2: 
+    remote-echo transfer completed
 
 

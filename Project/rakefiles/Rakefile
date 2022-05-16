@@ -1,0 +1,17 @@
+# Comment 
+# Comment 2
+# Comment 3
+
+PORT  = 5050
+HOSTS = 127.0.0.1
+
+
+actionset1: 
+    echo transferring client...
+        requires client.py
+
+
+actionset2: 
+    remote-echo client transfer completed
+
+

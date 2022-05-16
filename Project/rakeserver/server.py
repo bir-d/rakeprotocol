@@ -1,55 +1,154 @@
-''' 
-TODO: Implement multiple server management.
-- Requires refactoring of how Server objects function/what they store.
-- Initially single server for simplicity 
-'''
-
-import socket
-import sys
 import os
+import socket
+import threading
+import sys
+import subprocess
+import errno
 
-from server_library import Parser, Server, DirectoryNavigator, SocketHandling
+class Comms:
+    HEADER = 64
+    FORMAT = 'utf-8'
+
+class Codes:
+    DISCONN_MSG     = "!D"
+    COMMAND_MSG     = "!C"
+    REQUEST_MSG     = "!R"
+    SUCCEED_RSP     = "!S"
+    FAILURE_RSP     = "!F"
+
+class Server:
+    def __init__(self, host, port):
+        self.HOST, self.PORT, self.SERVER = host, int(port), f"{host}:{port}"
+        self.ADDR = (host, int(port))
+        self.DIRPATH    = os.getcwd() 
+
+        self.clients = list()
+        self.dirs = dict()
+        self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        print("[server]  Initialised rakeserver instance.")
+
+        self.server.bind(self.ADDR)
+        self.listen_to_socket()
+
+    def listen_to_socket(self):
+        self.server.listen()
+        print(f"[r.s] listening on: {self.SERVER}")
+        
+        while True:
+            conn, addr = self.server.accept() # blocks til connected
+            new_client = get_hostname(addr)
+            self.clients.append(new_client)
+            self.dirs[new_client] = create_dir(f"{new_client}_tmp")
+            
+            thread = threading.Thread(target=self.manage_connection, args=(conn, addr))
+            thread.start()
+            print(f"(active: {threading.activeCount() - 1})\n")
+
+    def manage_connection(self, conn, addr):
+        print(f"NEW: {get_hostname(addr)}")
+        connected = True
+        error = False
+        try:
+            while connected:
+                msg_type = conn.recv(2).decode(Comms.FORMAT) 
+                if msg_type == Codes.DISCONN_MSG:
+                    print(f"Disconnecting from client at '{get_hostname(addr)}'.")
+                    connected = False
+                else:
+                    msg_length = conn.recv(Comms.HEADER).decode(Comms.FORMAT) 
+                    msg_length = int(msg_length)
+
+                    if msg_type == Codes.COMMAND_MSG:
+                        msg = conn.recv(msg_length).decode(Comms.FORMAT) 
+                        self.execute_command(msg, addr, conn)
+                        print(f"[{get_hostname(addr)}] Completed execution.")
+                    elif msg_type == Codes.REQUEST_MSG:
+                        name_length = conn.recv(Comms.HEADER).decode(Comms.FORMAT) 
+                        name_length = int(name_length)
+                        name = conn.recv(name_length).decode(Comms.FORMAT) 
+                        msg = conn.recv(msg_length).decode(Comms.FORMAT) 
+                        try:
+                            self.get_requirement(name, msg, conn, addr)
+                        except:
+                            connected = False
+            self.disconnect_client(addr)
+        except KeyboardInterrupt:
+            print("[r.s]  Transmission halted by user. ")
+        except IOError as e:
+            print(e)
+            raise
+        finally:
+            conn.close()
+
+    def get_requirement(self, name, msg, conn, addr):
+        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+        try:
+            os.chdir(self.dirs[get_hostname(addr)])
+            file = os.open(name, flags)
+        except OSError as error:
+            if error.errno == errno.EEXIST:
+                pass
+            else: 
+                # conn.send(Codes.FAILURE_RSP.encode(Comms.FORMAT))
+                raise
+        else:
+            try:
+                with open(file, 'w') as file:
+                    file.write(msg)
+                # conn.send(Codes.SUCCEED_RSP.encode(Comms.FORMAT))
+            except IOError as e:
+                if e.errno == errno.EPIPE:
+                    pass
+            else:
+                os.chdir(self.DIRPATH)
+            finally:
+                os.chdir(self.DIRPATH)
+
+
+    def execute_command(self, msg, addr, conn):
+        print(f"[{addr[0]}:{str(addr[1])}]: > {msg}")
+        message = msg.split()
+        try:
+            with subprocess.Popen(message, stdout=subprocess.PIPE) as proc:
+                result = proc.stdout.read()
+                print("stdout: "+ result.decode(Comms.FORMAT))
+            msg_len = len(result)
+            send_len = str(msg_len).encode(Comms.FORMAT)
+            send_len +=  b' ' * (Comms.HEADER - len(send_len))
+            conn.sendall(send_len)
+            conn.sendall(result)
+        except Exception as e:
+            print(e)
+
+    def disconnect_client(self, addr):
+        self.clients.remove(get_hostname(addr))
+        self.dirs.pop(get_hostname(addr))
+
+def get_hostname(addr):
+    return f"{addr[0]}:{str(addr[1])}"
+
+def create_dir(dirName):
+    print("[mkdir]  Creating '" + dirName+ "' in CD.")
+    try: 
+        os.mkdir(dirName)
+        print("[mkdir]  Successfully created directory.")
+    except FileExistsError:  # Thrown where dir exists
+        print("[mkdir]  Directory already exists.")
+    except: # Any other errors must halt execution 
+        print("[mkdir]   ERROR: Cannot access or create directory.")
+        exit()
+    return os.getcwd() + "/" + dirName 
+
 
 if __name__ == '__main__':
-    defaultRakefilePath = "/".join(os.getcwd().split("/")[:-1]) + "/Rakefile"
-    print("[r.s]\tLocating Rakefile.")
-    try:
-        RakefilePath    = sys.argv[1]
-        print(" |-> [rakefile]  Using path given to find Rakefile.")
-    except IndexError:
-        print(" |-> [rakefile]  No Rakefile specified, using default path:")
-        print(" |\t'"+defaultRakefilePath+"'")
-        RakefilePath    = defaultRakefilePath
-    except:
-        print(" |-> [rakefile]  Rakefile not found at path: \n\t'" + sys.argv[1] + "'")
-        exit()
-
-    # Extract information from Rakefile.
-    print("\n[r.s]\tAnalysing Rakefile information.")
-    rakefileData  = Parser(RakefilePath)
+    if len(sys.argv) != 3:
+        print("[r.s]\tArgument error; usage <host> <port>")
+        sys.exit(1)
 
     # Uses Parser object to populate client data.
-    print("\n[r.s]\tInstantiating server.")
-    rakeServer   = Server(rakefileData)
+    server   = Server(sys.argv[1], sys.argv[2])
 
-    print("\n[r.s]\tCreating tmp directories for each host.")
-    dirNav = DirectoryNavigator(os.getcwd())
-    for host in rakefileData.hosts:
-        dirNav.createDir(host + "_tmp")
+
   
-    print("\n[r.s]\tEstablishing socket for communication with clients.")
-    host, port = rakefileData.hosts[0].split(":")
-    socket = SocketHandling(host, int(port))
-    socket.initiateListening()
-    # for host in rakeServer.hosts:
-    #     host, port = host.split(":")
-    #     socket = SocketHandling(host, int(port))
-    #     socket.initiateListening()
-    #     rakeServer.addSocket(socket)
-
-    print("\n[r.s]\tPreparing server to recieve commands.")
-    socket.awaitClient()
 
 
-
-    
