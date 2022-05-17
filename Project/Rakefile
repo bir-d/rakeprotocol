@@ -2,15 +2,12 @@
 # Comment 2
 # Comment 3
 
-PORT  = 6501
-HOSTS = 192.168.0.3
+PORT  = 5050
+HOSTS = 127.0.0.1
 
 actionset1: 
-    echo transferring file...
-        requires file
+	echo transferring file...
+		requires file
 
 actionset2: 
-    echo file sent
-    
-
-
+	echo file sent

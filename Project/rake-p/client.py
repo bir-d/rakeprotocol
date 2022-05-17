@@ -12,7 +12,7 @@ class Comms:
 class Codes:
     DISCONN_MSG     = "!D"
     COMMAND_MSG     = "!C"
-    REQUEST_MSG     = "!R"
+    REQUEST_MSG     = "!R" 
     SUCCEED_RSP     = "!S"
     FAILURE_RSP     = "!F"
 
@@ -21,12 +21,18 @@ class Client:
     def __init__(self, rakeData, v=True):
         print("[client]  Initialised rake.p client.")
         self.ACTIONSETS             = rakeData.actionsets
+        # addrs   = (host str, port int)
+        # servers = addrs.join()
         self.ADDRS, self.SERVERS    = list(), list()
+        # sockets[server] = socket
         self.SOCKETS                = dict()
+        #SOCKETS[SERVER[i]] = <socket object>
+        # SERVER[i] = "127.0.0.1:5050"
         self.DIRPATH = os.getcwd()
         self.dirs = dict()
 
         for hostname in rakeData.hosts:
+            # TODO:use single directory for communication responses
             self.dirs[hostname] = create_dir(hostname+'_tmp')
             self.SERVERS.append(hostname)
             host, port = hostname.split(":")
@@ -38,8 +44,9 @@ class Client:
         print("[client]  Sockets connected.")
 
     def connect_to_socket(self, ADDR):
-        SERVER = f"{ADDR[0]}:{ADDR[1]}"
+        SERVER = f"{ADDR[0]}:{ADDR[1]}" # check that addr[1] actually works
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
         self.SOCKETS[SERVER] = sock
         sock.connect_ex(ADDR)
         print(f"[socket]  Opened and connected to socket at {SERVER}.")
@@ -50,7 +57,6 @@ class Client:
                 socket.sendall(type.encode(Comms.FORMAT))
                 self.send_command(socket, val, addr)
                 print(f"[command@{addr}] > {val} ")
-
             except Exception as e:
                 print(f"Exception occurred while sending a command: {e}")
                 exit()
@@ -69,11 +75,10 @@ class Client:
                 exit()
 
     def send_requirement(self, socket, path, addr):
-        name = path.split("/")[-1].encode(Comms.FORMAT)
-
-        name_length = len(name)
-        send_name_length = str(name_length).encode(Comms.FORMAT)
-        send_name_length += b' ' * (Comms.HEADER - len(send_name_length))
+        name = path.split("/")[-1].encode(Comms.FORMAT) #b'test.txt'
+        name_length = len(name) # 8
+        send_name_length = str(name_length).encode(Comms.FORMAT) # b'8'
+        send_name_length += b' ' * (Comms.HEADER - len(send_name_length)) # pads to 64
 
         with open(path) as f:
             msg = f.read()
@@ -93,15 +98,20 @@ class Client:
 
 
     def send_command(self, socket, msg, addr):
-        message = msg.encode(Comms.FORMAT)
-        msg_length = len(message)
-        send_length = str(msg_length).encode(Comms.FORMAT)
-        send_length += b' ' * (Comms.HEADER - len(send_length))
+        message = msg.encode(Comms.FORMAT) # b'echo hello cormac'
+        msg_length = len(message)  # int:17
+        send_length = str(msg_length).encode(Comms.FORMAT) # b'17'
+        send_length += b' ' * (Comms.HEADER - len(send_length)) 
+
+        # server: msg_length = conn.recv(Comms.HEADER).decode(Comms.FORMAT) 
         socket.sendall(send_length)
+        #server: msg = conn.recv(msg_length).decode(Comms.FORMAT)
         socket.sendall(message)
 
-        rec_len = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
-        result = socket.recv(int(rec_len))
+        rec_len = socket.recv(Comms.HEADER).decode(Comms.FORMAT) # b'12'
+        result  = socket.recv(int(rec_len)) # receieves 12 bytes from server
+
+        # refactor as dirs no longer server based
         try:
             os.chdir(self.dirs[addr])
             with open("log", 'a') as file:
@@ -156,17 +166,15 @@ class Parser:
   def readRakefile(self):
     print("[parser]  Reading Rakefile...")
     with open(self.path, "r") as f:
-        line = f.readline().strip()   # Sets 4 spaces to tab character.
-
+        line = f.readline()   
+        print(line)
         while line:
-            line = line.strip()
-
             if line.startswith("actionset"):
                 commands = list()   # List of commands found in an ACTIONSETS.
                 line = f.readline()
 
                 # Commands/requirements of ACTIONSET must start with at least one tab.
-                while re.match(r'[ \t]', line):
+                while line.startswith("\t"):
                     line = line.strip()
                     if line.startswith("remote-"):  # Indicates command is executed remotely.
                         command = [ "remote",  line.strip().replace("remote-", "")]
@@ -175,7 +183,7 @@ class Parser:
                     
                     line = f.readline()
                 
-                    if re.match(r'[ \t\t]', line):
+                    if line.startswith("\t\t"):
                         line = line.strip()
                         command.append( line.replace("requires ", "").split() ) 
                         line = f.readline()
@@ -214,7 +222,12 @@ def create_dir(dirName, v=True):
         exit()
     return os.getcwd() + "/" + dirName 
 
+
+
+
 if __name__ == '__main__':
+    # assumption that the client is in its own folder, and the rake is in the 
+    #   folder above the client's folder
     default_path = "/".join(os.getcwd().split("/")[:-1]) + "/Rakefile"
 
     try:
@@ -230,7 +243,6 @@ if __name__ == '__main__':
 
     # Extract information from Rakefile.
     rakefileData  = Parser(rakefile_path)
-
 
     # Uses Parser object to populate client data.
     print("\n[r.p]\tInstantiating client.")

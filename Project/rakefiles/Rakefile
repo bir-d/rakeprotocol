@@ -10,7 +10,6 @@ actionset1:
     echo transferring client...
         requires client.py
 
-
 actionset2: 
     remote-echo client transfer completed
 

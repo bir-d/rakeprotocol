@@ -19,11 +19,11 @@ class Codes:
 class Server:
     def __init__(self, host, port):
         self.HOST, self.PORT, self.SERVER = host, int(port), f"{host}:{port}"
-        self.ADDR = (host, int(port))
+        self.ADDR       = (host, int(port))
         self.DIRPATH    = os.getcwd() 
 
         self.clients = list()
-        self.dirs = dict()
+        self.dirs = dict()  # dirs[CLIENTHOST] = directory/path/of/client/files 
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         print("[server]  Initialised rakeserver instance.")
 
@@ -34,9 +34,9 @@ class Server:
         self.server.listen()
         print(f"[r.s] listening on: {self.SERVER}")
         
-        while True:
+        while True: # TODO: Look into how to send back more than just stdout to client
             conn, addr = self.server.accept() # blocks til connected
-            new_client = get_hostname(addr)
+            new_client = get_hostname(addr) 
             self.clients.append(new_client)
             self.dirs[new_client] = create_dir(f"{new_client}_tmp")
             
@@ -47,7 +47,6 @@ class Server:
     def manage_connection(self, conn, addr):
         print(f"NEW: {get_hostname(addr)}")
         connected = True
-        error = False
         try:
             while connected:
                 msg_type = conn.recv(2).decode(Comms.FORMAT) 
@@ -55,10 +54,12 @@ class Server:
                     print(f"Disconnecting from client at '{get_hostname(addr)}'.")
                     connected = False
                 else:
+                    # client: socket.sendall(send_length)
                     msg_length = conn.recv(Comms.HEADER).decode(Comms.FORMAT) 
-                    msg_length = int(msg_length)
+                    msg_length = int(msg_length) 
 
                     if msg_type == Codes.COMMAND_MSG:
+                        # client: socket.sendall(message)
                         msg = conn.recv(msg_length).decode(Comms.FORMAT) 
                         self.execute_command(msg, addr, conn)
                         print(f"[{get_hostname(addr)}] Completed execution.")
@@ -108,13 +109,16 @@ class Server:
     def execute_command(self, msg, addr, conn):
         print(f"[{addr[0]}:{str(addr[1])}]: > {msg}")
         message = msg.split()
+        # TODO: manages pipe messages
         try:
             with subprocess.Popen(message, stdout=subprocess.PIPE) as proc:
                 result = proc.stdout.read()
                 print("stdout: "+ result.decode(Comms.FORMAT))
+
             msg_len = len(result)
             send_len = str(msg_len).encode(Comms.FORMAT)
             send_len +=  b' ' * (Comms.HEADER - len(send_len))
+
             conn.sendall(send_len)
             conn.sendall(result)
         except Exception as e:
@@ -145,7 +149,7 @@ if __name__ == '__main__':
         print("[r.s]\tArgument error; usage <host> <port>")
         sys.exit(1)
 
-    # Uses Parser object to populate client data.
+    # Create server object
     server   = Server(sys.argv[1], sys.argv[2])
 
 
