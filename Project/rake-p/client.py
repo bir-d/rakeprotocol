@@ -109,6 +109,7 @@ class Client:
     #   -   THIS MEANS THAT QUEUE LENGTH IS BY NUMBER OF ACTIVE CLIENTS
     #   -   THIS MEANS CLIENTS CANNOT RUN TWO COMMANDS AT THE SAME TIME
     #       AS THEY WILL BE UNDER THE SAME THREAD
+    #   FIX might be to have a separate thread for each command sent?
     def get_exec_cost(self,socket, addr):
         cost_len = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
         rec_cost_len = int(cost_len)
