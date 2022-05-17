@@ -15,6 +15,8 @@ class Codes:
     REQUEST_MSG     = "!R" 
     SUCCEED_RSP     = "!S"
     FAILURE_RSP     = "!F"
+    EXECUTE_GET     = "!E"
+
 
 # Client objects manage connections to servers in the Rakefile.
 class Client: 
@@ -60,6 +62,13 @@ class Client:
             except Exception as e:
                 print(f"Exception occurred while sending a command: {e}")
                 exit()
+        elif type == Codes.EXECUTE_GET:
+            try:
+                socket.sendall(type.encode(Comms.FORMAT))
+                self.get_exec_cost(socket, addr)
+            except Exception as e:
+                print(f"Exception occurred while sending required files: {e}")
+                exit()
         elif type == Codes.REQUEST_MSG:
             try:
                 socket.sendall(type.encode(Comms.FORMAT))
@@ -96,6 +105,16 @@ class Client:
         print(f"[files@{addr}] Sent '{name.decode(Comms.FORMAT)}'.")
 
 
+    # ASSUMES THAT EXECUTION COST IS BASED ON THREADS SERVER IS RUNNING
+    #   -   THIS MEANS THAT QUEUE LENGTH IS BY NUMBER OF ACTIVE CLIENTS
+    #   -   THIS MEANS CLIENTS CANNOT RUN TWO COMMANDS AT THE SAME TIME
+    #       AS THEY WILL BE UNDER THE SAME THREAD
+    def get_exec_cost(self,socket, addr):
+        cost_len = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
+        rec_cost_len = int(cost_len)
+        exec_cost = socket.recv(rec_cost_len).decode(Comms.FORMAT)
+        print(f"[{addr}] exec_cost = {exec_cost}")
+        return exec_cost
 
     def send_command(self, socket, msg, addr):
         message = msg.encode(Comms.FORMAT) # b'echo hello cormac'
@@ -210,6 +229,7 @@ class Parser:
             line = f.readline()
         print("[parser]  Read completed.")
 
+
 def create_dir(dirName, v=True):
     if v:print("[mkdir]  Creating '" + dirName+ "' in CD.")
     try: 
@@ -259,6 +279,7 @@ if __name__ == '__main__':
             for file in required:
                 client.send(test_socket, Codes.REQUEST_MSG, test_addr, file)
             client.send(test_socket, Codes.COMMAND_MSG, test_addr, command)
+            client.send(test_socket, Codes.EXECUTE_GET, test_addr, "")
     client.send(test_socket, Codes.DISCONN_MSG, test_addr, "")
     print(f"\nDisconnected from {test_addr}.")
     

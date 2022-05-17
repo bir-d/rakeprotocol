@@ -15,6 +15,7 @@ class Codes:
     REQUEST_MSG     = "!R"
     SUCCEED_RSP     = "!S"
     FAILURE_RSP     = "!F"
+    EXECUTE_GET     = "!E"
 
 class Server:
     def __init__(self, host, port):
@@ -47,12 +48,21 @@ class Server:
     def manage_connection(self, conn, addr):
         print(f"NEW: {get_hostname(addr)}")
         connected = True
+
         try:
             while connected:
                 msg_type = conn.recv(2).decode(Comms.FORMAT) 
                 if msg_type == Codes.DISCONN_MSG:
                     print(f"Disconnecting from client at '{get_hostname(addr)}'.")
                     connected = False
+                elif msg_type == Codes.EXECUTE_GET:
+                    print(f"Sending execution cost to '{get_hostname(addr)}'.")
+                    cost = threading.active_count() - 1
+                    cost = str(cost).encode(Comms.FORMAT)
+                    send_len = str(len(cost)).encode(Comms.FORMAT)
+                    send_len += b' ' * (Comms.HEADER - len(send_len))
+                    conn.sendall(send_len)
+                    conn.sendall(cost)
                 else:
                     # client: socket.sendall(send_length)
                     msg_length = conn.recv(Comms.HEADER).decode(Comms.FORMAT) 
