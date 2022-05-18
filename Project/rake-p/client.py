@@ -65,7 +65,8 @@ class Client:
         elif type == Codes.EXECUTE_GET:
             try:
                 socket.sendall(type.encode(Comms.FORMAT))
-                self.get_exec_cost(socket, addr)
+                exec_cost = self.get_exec_cost(socket, addr)
+                return exec_cost
             except Exception as e:
                 print(f"Exception occurred while sending required files: {e}")
                 exit()
@@ -269,20 +270,29 @@ if __name__ == '__main__':
     print("\n[r.p]\tInstantiating client.")
     client   = Client(rakefileData)
 
-    # TESTING
-    test_addr = client.SERVERS[0]
-    test_socket = client.SOCKETS[test_addr]
-
     for actionset in client.ACTIONSETS:
         for msg in actionset:
+            # loop through sockets and get execution cost
+            costs = []
+            lowest = 0
+            lowest_index = 0
+            for index, addr in enumerate(client.SERVERS):
+                exec_cost = int(client.send(client.SOCKETS[addr], Codes.EXECUTE_GET, addr, ""))
+                costs.append(exec_cost)
+                if exec_cost <= lowest:
+                    lowest = exec_cost
+                    lowest_index = index
+            
+                                
             location, command, required = msg[0], msg[1], msg[2]
 
             for file in required:
-                client.send(test_socket, Codes.REQUEST_MSG, test_addr, file)
-            client.send(test_socket, Codes.COMMAND_MSG, test_addr, command)
-            client.send(test_socket, Codes.EXECUTE_GET, test_addr, "")
-    client.send(test_socket, Codes.DISCONN_MSG, test_addr, "")
-    print(f"\nDisconnected from {test_addr}.")
+                client.send(client.SOCKETS[client.SERVERS[lowest_index]], Codes.REQUEST_MSG, client.SERVERS[lowest_index], file)
+            client.send(client.SOCKETS[client.SERVERS[lowest_index]], Codes.COMMAND_MSG, client.SERVERS[lowest_index], command)
+            
+    for addr in client.SERVERS:
+        client.send(client.SOCKETS[addr], Codes.DISCONN_MSG, addr, "")
+        print(f"\nDisconnected from {addr}.")
     
     
   
