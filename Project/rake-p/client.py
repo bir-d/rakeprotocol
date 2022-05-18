@@ -9,6 +9,7 @@ import select
 
 class Comms:
     HEADER = 64
+    CODE = 2
     MAX_LEN = 1024
     FORMAT = 'utf-8'
 
