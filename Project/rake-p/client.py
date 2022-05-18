@@ -1,8 +1,11 @@
+from asyncore import read
+from ctypes import addressof
 import errno
 import os
 import socket
 import sys
 import re
+import select
 
 class Comms:
     HEADER = 64
@@ -48,6 +51,7 @@ class Client:
     def connect_to_socket(self, ADDR):
         SERVER = f"{ADDR[0]}:{ADDR[1]}" # check that addr[1] actually works
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setblocking(0)
 
         self.SOCKETS[SERVER] = sock
         sock.connect_ex(ADDR)
@@ -111,7 +115,7 @@ class Client:
     #   -   THIS MEANS CLIENTS CANNOT RUN TWO COMMANDS AT THE SAME TIME
     #       AS THEY WILL BE UNDER THE SAME THREAD
     #   FIX might be to have a separate thread for each command sent?
-    def get_exec_cost(self,socket, addr):
+    def recv_exec_cost(self,socket, addr):
         cost_len = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
         rec_cost_len = int(cost_len)
         exec_cost = socket.recv(rec_cost_len).decode(Comms.FORMAT)
@@ -129,21 +133,22 @@ class Client:
         #server: msg = conn.recv(msg_length).decode(Comms.FORMAT)
         socket.sendall(message)
 
+    def recv_command(self, socket):
         rec_len = socket.recv(Comms.HEADER).decode(Comms.FORMAT) # b'12'
         result  = socket.recv(int(rec_len)) # receieves 12 bytes from server
-
-        # refactor as dirs no longer server based
-        try:
-            os.chdir(self.dirs[addr])
-            with open("log", 'a') as file:
-                file.write(result.decode(Comms.FORMAT))
-        except IOError as e:
-            if e.errno == errno.EPIPE:
-                pass
-        else:
-            os.chdir(self.DIRPATH)
-        finally:
-            os.chdir(self.DIRPATH)
+        print(result)
+        # # refactor as dirs no longer server based
+        # try:
+        #     os.chdir(self.dirs[addr])
+        #     with open("log", 'a') as file:
+        #         file.write(result.decode(Comms.FORMAT))
+        # except IOError as e:
+        #     if e.errno == errno.EPIPE:
+        #         pass
+        # else:
+        #     os.chdir(self.DIRPATH)
+        # finally:
+        #     os.chdir(self.DIRPATH)
 
 
         
@@ -271,6 +276,7 @@ if __name__ == '__main__':
     client   = Client(rakefileData)
 
     for actionset in client.ACTIONSETS:
+        sockets_in_use = []
         for msg in actionset:
             # loop through sockets and get execution cost
             costs = []
@@ -282,14 +288,29 @@ if __name__ == '__main__':
                 if exec_cost <= lowest:
                     lowest = exec_cost
                     lowest_index = index
-            
-                                
+            # TODO: THIS WILL BREAK IF THE LOWEST COST SERVER REFUSES OUR CONNECTION
+        
+
+
+            lowest_socket = client.SOCKETS[client.SERVERS[lowest_index]]   
             location, command, required = msg[0], msg[1], msg[2]
 
             for file in required:
-                client.send(client.SOCKETS[client.SERVERS[lowest_index]], Codes.REQUEST_MSG, client.SERVERS[lowest_index], file)
-            client.send(client.SOCKETS[client.SERVERS[lowest_index]], Codes.COMMAND_MSG, client.SERVERS[lowest_index], command)
-            
+                client.send(lowest_socket, Codes.REQUEST_MSG, client.SERVERS[lowest_index], file)
+
+            client.send(lowest_socket, Codes.COMMAND_MSG, client.SERVERS[lowest_index], command)
+            sockets_in_use.append(lowest_socket)            
+
+
+            # check if any sockets readable
+            readable = select.select(sockets_in_use, [], [])[0]
+            if (readable != []):
+                for sock in readable:
+                    client.recv_command(sock)
+
+
+
+
     for addr in client.SERVERS:
         client.send(client.SOCKETS[addr], Codes.DISCONN_MSG, addr, "")
         print(f"\nDisconnected from {addr}.")
