@@ -35,15 +35,15 @@ First, read the first two bytes for the code. Then read the next 62 bytes in (he
 If you receive FAILURE_RSP, the header follows the same 62 byte length, so read the body for any stderr, report, and terminate.
 If you receive SUCCESS_RSP, the header follows this format:
 * 2 byte `code`
-* 6 byte `response type`, one or more of (padded with spaces)
+* 6 byte `response type`, one or more of (spaces replace unset flags)
     * STDOUTP = !S
     * INCFILE = !I
     * FILETRN = !F
 * The other 56 bytes are still the padded length of the payload to be received.
 
-S should be be first to be received, and contains the standard output of the command to be reported and stored
-If I is set, receive and parse another header, which should contain a payload of a file to be received. Each file "transmission" will have F set as well.
-Receive F packets until I is no longer set.
+S should be be first to be received, and contains the standard output of the command to be reported and stored (`!S    `)
+If I is set (`!S!I`  ), receive and parse another header, which should contain a payload of a file to be received. Each file "transmission" will have F set as well.
+Receive F packets (`  !I!F`) until I is no longer set. (`    !F`)
 
 Store the standard output and any files, if any, on the client folder.
 
