@@ -1,4 +1,4 @@
-from asyncore import read
+from asyncore import read, socket_map
 from ctypes import addressof
 import errno
 import os
@@ -10,6 +10,7 @@ import select
 class Comms:
     HEADER = 64
     CODE = 2
+    RESPONSETYPES = 3
     MAX_LEN = 1024
     FORMAT = 'utf-8'
 
@@ -20,6 +21,10 @@ class Codes:
     SUCCEED_RSP     = "!S"
     FAILURE_RSP     = "!F"
     EXECUTE_GET     = "!E"
+    # file codes
+    STDOUTP         = "S"
+    INCFILE         = "I"
+    FILETRN         = "F"
 
 
 # Client objects manage connections to servers in the Rakefile.
@@ -44,19 +49,20 @@ class Client:
             host, port = hostname.split(":")
             self.ADDRS.append((host, int(port)))
 
-        print("[client]  Establishing sockets for communication with hosts.")
-        for addr in self.ADDRS:
-            self.connect_to_socket(addr)
-        print("[client]  Sockets connected.")
+        # print("[client]  Establishing sockets for communication with hosts.")
+        # for addr in self.ADDRS:
+        #     self.connect_to_socket(addr)
+        # print("[client]  Sockets connected.")
 
-    def connect_to_socket(self, ADDR):
+    def connect_to_socket(self, ADDR, blocking=0):
         SERVER = f"{ADDR[0]}:{ADDR[1]}" # check that addr[1] actually works
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.setblocking(0)
+        sock.setblocking(blocking)
 
-        self.SOCKETS[SERVER] = sock
+        #self.SOCKETS[SERVER] = sock
         sock.connect_ex(ADDR)
         print(f"[socket]  Opened and connected to socket at {SERVER}.")
+        return sock
 
     def send(self, socket, type, addr, val):
         if type == Codes.COMMAND_MSG:
@@ -70,8 +76,6 @@ class Client:
         elif type == Codes.EXECUTE_GET:
             try:
                 socket.sendall(type.encode(Comms.FORMAT))
-                exec_cost = self.get_exec_cost(socket, addr)
-                return exec_cost
             except Exception as e:
                 print(f"Exception occurred while sending required files: {e}")
                 exit()
@@ -135,7 +139,8 @@ class Client:
         socket.sendall(message)
 
     def recv_command(self, socket):
-        rec_len = socket.recv(Comms.HEADER).decode(Comms.FORMAT) # b'12'
+        code = socket.recv(Comms.CODE).decode(Comms.FORMAT)
+        rec_len = socket.recv(Comms.HEADER ).decode(Comms.FORMAT) # b'12'
         result  = socket.recv(int(rec_len)) # receieves 12 bytes from server
         print(result)
         # # refactor as dirs no longer server based
@@ -150,6 +155,41 @@ class Client:
         #     os.chdir(self.DIRPATH)
         # finally:
         #     os.chdir(self.DIRPATH)
+
+    def handle_filestream(self, socket):
+        header = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
+        code = header[0:2]
+        response_flags = header[2:5]
+        length = int(header[5:-1])
+        filename = socket.recv(length).decode(Comms.FORMAT)
+        ###TODO: RECEIVE FILE LOGIC
+        if response_flags[1] == Codes.INCFILE:
+            self.handle_filestream(socket)
+        return
+
+    def handle_response(self, socket):
+        header = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
+        code = header[0:2]
+        if code == Codes.EXECUTE_GET:
+            length = int(header[2:-1])
+            return int(socket.recv(length).decode(Comms.FORMAT))
+
+        elif code == Codes.SUCCEED_RSP:
+            response_flags = header[2:5]
+            length = int(header[5:-1])
+            if ((response_flags[0] == Codes.STDOUTP) and (response_flags[2] != Codes.FILETRN)):
+                stdout = socket.recv(length).decode(Comms.FORMAT)
+                print(stdout)
+                
+                if response_flags[1] == Codes.INCFILE:
+                    self.handle_filestream(socket)
+        elif code == Codes.FAILURE_RSP:
+            length = int(header[2:-1])
+            print("Server failed to execute:")
+            print(socket.recv(length).decode(Comms.FORMAT))
+            exit()
+                
+
 
 
         
@@ -276,45 +316,47 @@ if __name__ == '__main__':
     print("\n[r.p]\tInstantiating client.")
     client   = Client(rakefileData)
 
-    for actionset in client.ACTIONSETS:
-        sockets_in_use = []
+    print(client.ADDRS)
+    ready = client.ADDRS
+    watchlist = []
+    for actionset in client.ACTIONSETS: 
+        commands_sent = 0
         for msg in actionset:
-            # loop through sockets and get execution cost
-            costs = []
-            lowest = 0
-            lowest_index = 0
-            for index, addr in enumerate(client.SERVERS):
-                exec_cost = int(client.send(client.SOCKETS[addr], Codes.EXECUTE_GET, addr, ""))
-                costs.append(exec_cost)
-                if exec_cost <= lowest:
-                    lowest = exec_cost
-                    lowest_index = index
-            # TODO: THIS WILL BREAK IF THE LOWEST COST SERVER REFUSES OUR CONNECTION
-        
-
-
-            lowest_socket = client.SOCKETS[client.SERVERS[lowest_index]]   
             location, command, required = msg[0], msg[1], msg[2]
+            # poll for cost
+            lowestCost = 1000000
+            lowestCostIndex = 10000000
+            for i, server in enumerate(ready):
+                sock = client.connect_to_socket(server, 1)
+                client.send(sock, Codes.EXECUTE_GET, server, "")
+                exec_cost = int(client.recv_exec_cost(sock, server))
+                if exec_cost <= lowestCost:
+                    lowestCostIndex = i
+                    lowestCost = exec_cost
+                client.send(sock, Codes.DISCONN_MSG, server, "")
+            print(lowestCostIndex, lowestCost)
 
-            for file in required:
-                client.send(lowest_socket, Codes.REQUEST_MSG, client.SERVERS[lowest_index], file)
+            # send command
+            sock = client.connect_to_socket(ready[lowestCostIndex])
+            client.send(sock, Codes.COMMAND_MSG, ready[lowestCostIndex], command)
+            watchlist.append(sock)
+            commands_sent += 1
 
-            client.send(lowest_socket, Codes.COMMAND_MSG, client.SERVERS[lowest_index], command)
-            sockets_in_use.append(lowest_socket)            
-
-
-            # check if any sockets readable
-            readable = select.select(sockets_in_use, [], [])[0]
-            if (readable != []):
+        while True:
+            readable = select.select(watchlist, [], [])[0]
+            if readable != []:
                 for sock in readable:
-                    client.recv_command(sock)
+                    client.handle_response(sock)
+                    watchlist.remove(sock)
+                    client.send(sock, Codes.DISCONN_MSG, "", "")
+                    commands_sent -= 1
+
+            if commands_sent == 0:
+                break
 
 
 
 
-    for addr in client.SERVERS:
-        client.send(client.SOCKETS[addr], Codes.DISCONN_MSG, addr, "")
-        print(f"\nDisconnected from {addr}.")
     
     
   

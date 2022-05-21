@@ -48,11 +48,11 @@ Receive F packets (` IF`) until I is no longer set. (`  F`)
 Each file packet is proceeded by a filename packet, designated by having all three flags set (`SIF`)
 
 ##### A quick example
-(`!S!I  `) -- This is the standard output. Report it. We can see that `!I` is set, lets recv the next packet...
-(`!S!I!F`) -- This is a filename. Store it and receive the file upcoming...
-(`  !I!F`) -- Here is the file content for the previously received filename. `!I` is still set. Lets keep receiving.
-(`!S!I!F`) -- As expected, another filename.
-(`    !F`) -- Here is the file content. `!I` is not set, so that is the last file we need to receive.
+(`SI `) -- This is the standard output. Report it. We can see that `I` is set, lets recv the next packet...
+(`SIF`) -- This is a filename. Store it and receive the file upcoming...
+(` IF`) -- Here is the file content for the previously received filename. `I` is still set. Lets keep receiving.
+(`SIF`) -- As expected, another filename.
+(`  F`) -- Here is the file content. `I` is not set, so that is the last file we need to receive.
 
 Store the standard output and any files, if any, on the client folder.
 

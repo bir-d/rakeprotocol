@@ -7,15 +7,22 @@ import errno
 
 class Comms:
     HEADER = 64
+    CODE = 2
+    RESPONSETYPES = 3
+    MAX_LEN = 1024
     FORMAT = 'utf-8'
 
 class Codes:
     DISCONN_MSG     = "!D"
     COMMAND_MSG     = "!C"
-    REQUEST_MSG     = "!R"
+    REQUEST_MSG     = "!R" 
     SUCCEED_RSP     = "!S"
     FAILURE_RSP     = "!F"
     EXECUTE_GET     = "!E"
+    # file codes
+    STDOUTP         = "S"
+    INCFILE         = "I"
+    FILETRN         = "F"
 
 class Server:
     def __init__(self, host, port):
@@ -125,11 +132,13 @@ class Server:
                 result = proc.stdout.read()
                 print("stdout: "+ result.decode(Comms.FORMAT))
 
-            msg_len = len(result)
-            send_len = str(msg_len).encode(Comms.FORMAT)
-            send_len +=  b' ' * (Comms.HEADER - len(send_len))
+            code = Codes.SUCCEED_RSP
+            options = "S  "
+            msg_len = str(len(result))
+            padding = (' ' * (Comms.HEADER - len(code) - len(options) - len(msg_len)))
 
-            conn.sendall(send_len)
+            header = (code + options + msg_len + padding).encode(Comms.FORMAT)
+            conn.sendall(header)
             conn.sendall(result)
         except Exception as e:
             print(e)
