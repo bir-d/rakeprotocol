@@ -324,8 +324,8 @@ if __name__ == '__main__':
         for msg in actionset:
             location, command, required = msg[0], msg[1], msg[2]
             # poll for cost
-            lowestCost = 1000000
-            lowestCostIndex = 10000000
+            lowestCost = 0
+            lowestCostIndex = 0
             for i, server in enumerate(ready):
                 sock = client.connect_to_socket(server, 1)
                 client.send(sock, Codes.EXECUTE_GET, server, "")
