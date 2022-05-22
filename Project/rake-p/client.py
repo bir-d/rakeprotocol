@@ -21,10 +21,13 @@ class Codes:
     SUCCEED_RSP     = "!S"
     FAILURE_RSP     = "!F"
     EXECUTE_GET     = "!E"
-    # file codes
+    # response types
     STDOUTP         = "S"
     INCFILE         = "I"
     FILETRN         = "F"
+    # filestream codes
+    FILENAME    = "!N"
+    FILETRAN    = "!T"
 
 
 # Client objects manage connections to servers in the Rakefile.
@@ -92,6 +95,19 @@ class Client:
             except Exception as e:
                 print(f"Exception occurred while attempting to disconnect: {e}")
                 exit()
+        elif type == Codes.FILENAME:
+            try:
+                socket.sendall(type.encode(Comms.FORMAT))
+            except Exception as e:
+                print(f"Exception occurred while requesting filename: {e}")
+                exit()
+        elif type == Codes.FILETRAN:
+            try:
+                socket.sendall(type.encode(Comms.FORMAT))
+            except Exception as e:
+                print(f"Exception occurred while requesting file transfer: {e}")
+                exit()
+
 
     def send_requirement(self, socket, path, addr):
         name = path.split("/")[-1].encode(Comms.FORMAT) #b'test.txt'
@@ -132,65 +148,100 @@ class Client:
         msg_length = len(message)  # int:17
         send_length = str(msg_length).encode(Comms.FORMAT) # b'17'
         send_length += b' ' * (Comms.HEADER - len(send_length)) 
-
         # server: msg_length = conn.recv(Comms.HEADER).decode(Comms.FORMAT) 
         socket.sendall(send_length)
         #server: msg = conn.recv(msg_length).decode(Comms.FORMAT)
         socket.sendall(message)
 
-    def recv_command(self, socket):
-        code = socket.recv(Comms.CODE).decode(Comms.FORMAT)
-        rec_len = socket.recv(Comms.HEADER ).decode(Comms.FORMAT) # b'12'
-        result  = socket.recv(int(rec_len)) # receieves 12 bytes from server
-        print(result)
-        # # refactor as dirs no longer server based
-        # try:
-        #     os.chdir(self.dirs[addr])
-        #     with open("log", 'a') as file:
-        #         file.write(result.decode(Comms.FORMAT))
-        # except IOError as e:
-        #     if e.errno == errno.EPIPE:
-        #         pass
-        # else:
-        #     os.chdir(self.DIRPATH)
-        # finally:
-        #     os.chdir(self.DIRPATH)
-
-    def handle_filestream(self, socket):
+    def handle_response(self, socket, filestream = False):
         header = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
         code = header[0:2]
         response_flags = header[2:5]
-        length = int(header[5:-1])
-        filename = socket.recv(length).decode(Comms.FORMAT)
-        ###TODO: RECEIVE FILE LOGIC
-        if response_flags[1] == Codes.INCFILE:
-            self.handle_filestream(socket)
-        return
 
-    def handle_response(self, socket):
-        header = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
-        code = header[0:2]
         if code == Codes.EXECUTE_GET:
             length = int(header[2:-1])
             return int(socket.recv(length).decode(Comms.FORMAT))
 
         elif code == Codes.SUCCEED_RSP:
-            response_flags = header[2:5]
             length = int(header[5:-1])
-            if ((response_flags[0] == Codes.STDOUTP) and (response_flags[2] != Codes.FILETRN)):
+
+            if filestream:
+                filestream_flag = response_flags[0:2]
+                if filestream_flag == Codes.FILENAME:
+                    filename = socket.recv(length).decode(Comms.FORMAT)
+                    return filename
+
+            if response_flags[0] == Codes.STDOUTP:
                 stdout = socket.recv(length).decode(Comms.FORMAT)
                 print(stdout)
-                
+
                 if response_flags[1] == Codes.INCFILE:
-                    self.handle_filestream(socket)
+                    self.receive_filestream(socket)
+
         elif code == Codes.FAILURE_RSP:
             length = int(header[2:-1])
             print("Server failed to execute:")
             print(socket.recv(length).decode(Comms.FORMAT))
             exit()
-                
 
+    def receive_filestream(self, socket):
+        # filestreams are blocking
+        socket.setblocking(1)
+        # metadata packet
+        header = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
+        code = header[0:2]
+        response_flags = header[2:5]
+        files_to_receive = int(header[5:-1])
+        # receive the files
+        while files_to_receive > 0:
+            # get filename
+            self.send(socket, Codes.FILENAME, "", "")
+            filename = self.handle_response(socket, True)
+            # get file
+            self.send(socket, Codes.FILETRAN, "", "")
+            # receive data and write to file
+            with open(filename, "wb") as f:
+                while True:
+                    data = socket.recv(Comms.MAX_LEN)
+                    if not data:    
+                        break
+                    f.write(data)
+            files_to_receive -= 1 
+        socket.setblocking(0)
 
+    def send_filestream(self, socket, files):
+        #sockets are blocking
+        socket.setblocking(1)
+        #send filestream packet
+        code = Codes.SUCCEED_RSP
+        response_type = Codes.STDOUTP + Codes.INCFILE + Codes.FILETRN
+        files_to_send = str(len(files))
+        padding = " " * (int(Comms.HEADER) - len(code) - len(response_type) - len(files_to_send))
+        filestream_packet = str( code + response_type + files_to_send + padding)
+        socket.sendall(filestream_packet.encode(Comms.FORMAT))
+
+        for file in files:
+            # wait for filename request
+            header = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
+            code = header[0:2]
+            response_flags = header[2:5]
+            filestream_code = response_flags[0:2]
+            if filestream_code == Codes.FILENAME:
+                # send filename
+                filestream_code = Codes.FILENAME
+                filename_length = str(len(file))
+                padding = " " * (int(Comms.HEADER) - len(code) - len(filestream_code) - len(filename_length))
+                filename_packet = str(code + filestream_code + filename_length + padding)
+                socket.sendall(filename_packet.encode(Comms.FORMAT))
+            elif filestream_code == Codes.FILETRAN:
+                # send file
+                with open(file, "rb") as f:
+                    while True:
+                        data = f.read(Comms.MAX_LEN)
+                        if not data:
+                            break
+                        socket.sendall(data)
+        socket.setblocking(0)
 
         
 # Creates an object from parsed Rakefile information. 
