@@ -46,16 +46,9 @@ class Client:
         self.dirs = dict()
 
         for hostname in rakeData.hosts:
-            # TODO:use single directory for communication responses
-            self.dirs[hostname] = create_dir(hostname+'_tmp')
             self.SERVERS.append(hostname)
             host, port = hostname.split(":")
             self.ADDRS.append((host, int(port)))
-
-        # print("[client]  Establishing sockets for communication with hosts.")
-        # for addr in self.ADDRS:
-        #     self.connect_to_socket(addr)
-        # print("[client]  Sockets connected.")
 
     def connect_to_socket(self, ADDR, blocking=0):
         SERVER = f"{ADDR[0]}:{ADDR[1]}" # check that addr[1] actually works
@@ -353,7 +346,7 @@ if __name__ == '__main__':
                     client.send(sock, Codes.DISCONN_MSG, server, "")
                 sock = client.connect_to_socket(ready[lowestCostIndex])
             else:
-                sock = client.connect_to_socket(("localhost", client.PORT))
+                sock = client.connect_to_socket(("localhost", int(rakefileData.port)))
 
             # send requirements (if any)
             if required != []:
