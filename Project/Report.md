@@ -50,15 +50,15 @@ Filestreams are just sequences of files being sent. Each file takes the form of 
 Each filestream begins with a filestream packet, which indicates the number of files which need to be received instead of a payload length, and does not have a payload. Additionally, it is designated by having all three flags set.
 For each file that needs to be received, the client requests a filename, then requests the file transfer to start. This repeats until there are no more files to receive. These requests occupy these codes:
 
-* FILENAME_REQ = !N
-* FILETRAN_REQ = !T
+* FILENAME = !N
+* FILETRAN = !T
 
-In general, filestream packets (aside from the metadata packet) only have F set (`  F`)
+In general, filestream packets (aside from the metadata packet) don't use STDOUTP or INCFILE, so those two bytes are used for FILENAME or FILETRAN.
 
 ##### A quick example
-(`!SSI `) -- This is the standard output. Report it. We can see that `I` is set, meaning that there are incoming files. Lets receive the next 64 byte packet
+(`!SSI `) -- This is the standard output. Report it. We can see that `I` is set, meaning that there are incoming files. Lets receive the next 64 byte packet 
 (`!SSIF2`) -- This marks the start of the filestream. We can see that 2 files are to be received. We send off a filename req packet and receive:
-(`!S  F10`, `output.txt`) -- We receive a 10 byte filename, `output.txt`. We send off a filetran request and keep reading until we read 0, and save that data to a file. We know from the metadata packet we have one more file to receive, so we repeat the process once more.
+(`!S!NF10`, `output.txt`) -- We receive a 10 byte filename, `output.txt`. We send off a filetran request and keep reading until we read 0, and save that data to a file. We know from the metadata packet we have one more file to receive, so we repeat the process once more.
 
 Store the standard output and any files, if any, on the client folder.
 

@@ -147,6 +147,65 @@ class Server:
         self.clients.remove(get_hostname(addr))
         self.dirs.pop(get_hostname(addr))
 
+    def receive_filestream(self, socket):
+        # filestreams are blocking
+        socket.setblocking(1)
+        # metadata packet
+        header = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
+        code = header[0:2]
+        response_flags = header[2:5]
+        files_to_receive = int(header[5:-1])
+        # receive the files
+        while files_to_receive > 0:
+            # get filename
+            self.send(socket, Codes.FILENAME, "", "")
+            filename = self.handle_response(socket, True)
+            # get file
+            self.send(socket, Codes.FILETRAN, "", "")
+            # receive data and write to file https://www.thepythoncode.com/article/send-receive-files-using-sockets-python
+            with open(filename, "wb") as f:
+                while True:
+                    data = socket.recv(Comms.MAX_LEN)
+                    if not data:    
+                        break
+                    f.write(data)
+            files_to_receive -= 1 
+        socket.setblocking(0)
+
+    def send_filestream(self, socket, files):
+        #sockets are blocking
+        socket.setblocking(1)
+        #send filestream packet
+        code = Codes.SUCCEED_RSP
+        response_type = Codes.STDOUTP + Codes.INCFILE + Codes.FILETRN
+        files_to_send = str(len(files))
+        padding = " " * (int(Comms.HEADER) - len(code) - len(response_type) - len(files_to_send))
+        filestream_packet = str( code + response_type + files_to_send + padding)
+        socket.sendall(filestream_packet.encode(Comms.FORMAT))
+
+        for file in files:
+            # wait for filename request
+            header = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
+            code = header[0:2]
+            response_flags = header[2:5]
+            filestream_code = response_flags[0:2]
+            if filestream_code == Codes.FILENAME:
+                # send filename
+                filestream_code = Codes.FILENAME
+                filename_length = str(len(file))
+                padding = " " * (int(Comms.HEADER) - len(code) - len(filestream_code) - len(filename_length))
+                filename_packet = str(code + filestream_code + filename_length + padding)
+                socket.sendall(filename_packet.encode(Comms.FORMAT))
+            elif filestream_code == Codes.FILETRAN:
+                # send file https://www.thepythoncode.com/article/send-receive-files-using-sockets-python
+                with open(file, "rb") as f:
+                    while True:
+                        data = f.read(Comms.MAX_LEN)
+                        if not data:
+                            break
+                        socket.sendall(data)
+        socket.setblocking(0)
+
 def get_hostname(addr):
     return f"{addr[0]}:{str(addr[1])}"
 
