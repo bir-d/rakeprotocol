@@ -108,41 +108,6 @@ class Client:
                 print(f"Exception occurred while requesting file transfer: {e}")
                 exit()
 
-
-    def send_requirement(self, socket, path, addr):
-        name = path.split("/")[-1].encode(Comms.FORMAT) #b'test.txt'
-        name_length = len(name) # 8
-        send_name_length = str(name_length).encode(Comms.FORMAT) # b'8'
-        send_name_length += b' ' * (Comms.HEADER - len(send_name_length)) # pads to 64
-
-        with open(path) as f:
-            msg = f.read()
-
-        message = msg.encode(Comms.FORMAT)
-        msg_length = len(message)
-        send_msg_length = str(msg_length).encode(Comms.FORMAT)
-        send_msg_length += b' ' * (Comms.HEADER - len(send_msg_length))
-
-        socket.sendall(send_msg_length)
-        socket.sendall(send_name_length)
-        socket.sendall(name)
-        socket.sendall(message)
-
-        print(f"[files@{addr}] Sent '{name.decode(Comms.FORMAT)}'.")
-
-
-    # ASSUMES THAT EXECUTION COST IS BASED ON THREADS SERVER IS RUNNING
-    #   -   THIS MEANS THAT QUEUE LENGTH IS BY NUMBER OF ACTIVE CLIENTS
-    #   -   THIS MEANS CLIENTS CANNOT RUN TWO COMMANDS AT THE SAME TIME
-    #       AS THEY WILL BE UNDER THE SAME THREAD
-    #   FIX might be to have a separate thread for each command sent?
-    def recv_exec_cost(self,socket, addr):
-        cost_len = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
-        rec_cost_len = int(cost_len)
-        exec_cost = socket.recv(rec_cost_len).decode(Comms.FORMAT)
-        print(f"[{addr}] exec_cost = {exec_cost}")
-        return exec_cost
-
     def send_command(self, socket, msg, addr):
         message = msg.encode(Comms.FORMAT) # b'echo hello cormac'
         msg_length = len(message)  # int:17
@@ -243,7 +208,6 @@ class Client:
                         socket.sendall(data)
         socket.setblocking(0)
 
-        
 # Creates an object from parsed Rakefile information. 
 class Parser:
   def __init__(self, path, v=True):
