@@ -85,7 +85,7 @@ class Client:
         elif type == Codes.REQUEST_MSG:
             try:
                 socket.sendall(type.encode(Comms.FORMAT))
-                self.send_requirement(socket, val, addr)
+                self.send_filestream(socket, val)
             except Exception as e:
                 print(f"Exception occurred while sending required files: {e}")
                 exit()
@@ -164,7 +164,7 @@ class Client:
             filename = self.handle_response(socket, True)
             # get file
             self.send(socket, Codes.FILETRAN, "", "")
-            # receive data and write to file
+            # receive data and write to file https://www.thepythoncode.com/article/send-receive-files-using-sockets-python
             with open(filename, "wb") as f:
                 while True:
                     data = socket.recv(Comms.MAX_LEN)
@@ -199,7 +199,7 @@ class Client:
                 filename_packet = str(code + filestream_code + filename_length + padding)
                 socket.sendall(filename_packet.encode(Comms.FORMAT))
             elif filestream_code == Codes.FILETRAN:
-                # send file
+                # send file https://www.thepythoncode.com/article/send-receive-files-using-sockets-python
                 with open(file, "rb") as f:
                     while True:
                         data = f.read(Comms.MAX_LEN)
@@ -338,22 +338,29 @@ if __name__ == '__main__':
         commands_sent = 0
         for msg in actionset:
             location, command, required = msg[0], msg[1], msg[2]
-            # poll for cost
-            lowestCost = 0
-            lowestCostIndex = 0
-            for i, server in enumerate(ready):
-                sock = client.connect_to_socket(server, 1)
-                client.send(sock, Codes.EXECUTE_GET, server, "")
-                exec_cost = int(client.recv_exec_cost(sock, server))
-                if exec_cost <= lowestCost:
-                    lowestCostIndex = i
-                    lowestCost = exec_cost
-                client.send(sock, Codes.DISCONN_MSG, server, "")
-            print(lowestCostIndex, lowestCost)
+
+            if location == "remote":
+                # poll for cost
+                lowestCost = 0
+                lowestCostIndex = 0
+                for i, server in enumerate(ready):
+                    sock = client.connect_to_socket(server, 1)
+                    client.send(sock, Codes.EXECUTE_GET, server, "")
+                    exec_cost = int(client.recv_exec_cost(sock, server))
+                    if exec_cost <= lowestCost:
+                        lowestCostIndex = i
+                        lowestCost = exec_cost
+                    client.send(sock, Codes.DISCONN_MSG, server, "")
+                sock = client.connect_to_socket(ready[lowestCostIndex])
+            else:
+                sock = client.connect_to_socket(("localhost", client.PORT))
+
+            # send requirements (if any)
+            if required != []:
+                client.send(sock, Codes.REQUEST_MSG, "", required)
 
             # send command
-            sock = client.connect_to_socket(ready[lowestCostIndex])
-            client.send(sock, Codes.COMMAND_MSG, ready[lowestCostIndex], command)
+            client.send(sock, Codes.COMMAND_MSG, "", command)
             watchlist.append(sock)
             commands_sent += 1
 
