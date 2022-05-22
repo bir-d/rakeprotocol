@@ -23,6 +23,9 @@ class Codes:
     STDOUTP         = "S"
     INCFILE         = "I"
     FILETRN         = "F"
+    # filestream codes
+    FILENAME    = "!N"
+    FILETRAN    = "!T"
 
 class Server:
     def __init__(self, host, port):
@@ -59,6 +62,7 @@ class Server:
         try:
             while connected:
                 msg_type = conn.recv(2).decode(Comms.FORMAT) 
+                print(msg_type)
                 if msg_type == Codes.DISCONN_MSG:
                     print(f"Disconnecting from client at '{get_hostname(addr)}'.")
                     connected = False
@@ -70,6 +74,11 @@ class Server:
                     send_len += b' ' * (Comms.HEADER - len(send_len))
                     conn.sendall(send_len)
                     conn.sendall(cost)
+                elif msg_type == Codes.REQUEST_MSG:
+                    try:
+                        self.receive_filestream(conn)
+                    except:
+                        connected = False
                 else:
                     # client: socket.sendall(send_length)
                     msg_length = conn.recv(Comms.HEADER).decode(Comms.FORMAT) 
@@ -80,11 +89,6 @@ class Server:
                         msg = conn.recv(msg_length).decode(Comms.FORMAT) 
                         self.execute_command(msg, addr, conn)
                         print(f"[{get_hostname(addr)}] Completed execution.")
-                    elif msg_type == Codes.REQUEST_MSG:
-                        try:
-                            self.receive_filestream(conn)
-                        except:
-                            connected = False
             self.disconnect_client(addr)
         except KeyboardInterrupt:
             print("[r.s]  Transmission halted by user. ")
@@ -119,6 +123,7 @@ class Server:
         self.dirs.pop(get_hostname(addr))
 
     def receive_filestream(self, socket):
+        print("receiving filestream")
         # filestreams are blocking
         socket.setblocking(1)
         # metadata packet
@@ -126,17 +131,21 @@ class Server:
         code = header[0:2]
         response_flags = header[2:5]
         files_to_receive = int(header[5:-1])
+        print(header, files_to_receive)
         # receive the files
+        print(files_to_receive > 0)
         while files_to_receive > 0:
             # get filename
-            self.send(socket, Codes.FILENAME, "", "")
-            
+            print("getting filename")
+            socket.sendall(Codes.FILENAME.encode(Comms.FORMAT))
+            print("sent filename req")
             #have to manually get the header since we dont have handle_connection()
             header = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
             code = header[0:2]
             filestream_code = header[2:5]
             length = int( header[5:-1] )
             filename = socket.recv(length).decode(Comms.FORMAT)
+            print(header, filename)
 
 
             # get file

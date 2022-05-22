@@ -168,6 +168,7 @@ class Client:
         socket.setblocking(0)
 
     def send_filestream(self, socket, files):
+        print(f"sending filestream of {files}")
         #sockets are blocking
         socket.setblocking(1)
         #send filestream packet
@@ -189,7 +190,7 @@ class Client:
                 filestream_code = Codes.FILENAME
                 filename_length = str(len(file))
                 padding = " " * (int(Comms.HEADER) - len(code) - len(filestream_code) - len(filename_length))
-                filename_packet = str(code + filestream_code + filename_length + padding)
+                filename_packet = str(code + filestream_code + filename_length + padding + file)
                 socket.sendall(filename_packet.encode(Comms.FORMAT))
             elif filestream_code == Codes.FILETRAN:
                 # send file https://www.thepythoncode.com/article/send-receive-files-using-sockets-python
@@ -349,6 +350,7 @@ if __name__ == '__main__':
                 sock = client.connect_to_socket(("localhost", int(rakefileData.port)))
 
             # send requirements (if any)
+            print(f"requirements required: {required}")
             if required != []:
                 client.send(sock, Codes.REQUEST_MSG, "", required)
 
