@@ -81,12 +81,8 @@ class Server:
                         self.execute_command(msg, addr, conn)
                         print(f"[{get_hostname(addr)}] Completed execution.")
                     elif msg_type == Codes.REQUEST_MSG:
-                        name_length = conn.recv(Comms.HEADER).decode(Comms.FORMAT) 
-                        name_length = int(name_length)
-                        name = conn.recv(name_length).decode(Comms.FORMAT) 
-                        msg = conn.recv(msg_length).decode(Comms.FORMAT) 
                         try:
-                            self.get_requirement(name, msg, conn, addr)
+                            self.receive_filestream(conn)
                         except:
                             connected = False
             self.disconnect_client(addr)
@@ -97,31 +93,6 @@ class Server:
             raise
         finally:
             conn.close()
-
-    def get_requirement(self, name, msg, conn, addr):
-        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
-        try:
-            os.chdir(self.dirs[get_hostname(addr)])
-            file = os.open(name, flags)
-        except OSError as error:
-            if error.errno == errno.EEXIST:
-                pass
-            else: 
-                # conn.send(Codes.FAILURE_RSP.encode(Comms.FORMAT))
-                raise
-        else:
-            try:
-                with open(file, 'w') as file:
-                    file.write(msg)
-                # conn.send(Codes.SUCCEED_RSP.encode(Comms.FORMAT))
-            except IOError as e:
-                if e.errno == errno.EPIPE:
-                    pass
-            else:
-                os.chdir(self.DIRPATH)
-            finally:
-                os.chdir(self.DIRPATH)
-
 
     def execute_command(self, msg, addr, conn):
         print(f"[{addr[0]}:{str(addr[1])}]: > {msg}")
@@ -159,7 +130,15 @@ class Server:
         while files_to_receive > 0:
             # get filename
             self.send(socket, Codes.FILENAME, "", "")
-            filename = self.handle_response(socket, True)
+            
+            #have to manually get the header since we dont have handle_connection()
+            header = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
+            code = header[0:2]
+            filestream_code = header[2:5]
+            length = int( header[5:-1] )
+            filename = socket.recv(length).decode(Comms.FORMAT)
+
+
             # get file
             self.send(socket, Codes.FILETRAN, "", "")
             # receive data and write to file https://www.thepythoncode.com/article/send-receive-files-using-sockets-python
