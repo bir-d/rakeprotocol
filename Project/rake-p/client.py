@@ -353,7 +353,7 @@ if __name__ == '__main__':
                 for i, server in enumerate(ready):
                     sock = client.connect_to_socket(server, 1)
                     client.send(sock, Codes.EXECUTE_GET, server, "")
-                    exec_cost = int(client.recv_exec_cost(sock, server))
+                    exec_cost = int(client.handle_response(sock, server))
                     if exec_cost <= lowestCost:
                         lowestCostIndex = i
                         lowestCost = exec_cost
