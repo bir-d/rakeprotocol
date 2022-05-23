@@ -101,6 +101,12 @@ class Client:
             except Exception as e:
                 print(f"Exception occurred while requesting file transfer: {e}")
                 exit()
+        elif type == Codes.FILESIZE:
+            try:
+                socket.sendall(type.encode(Comms.FORMAT))
+            except Exception as e:
+                print(f"Exception occurred while requesting file size: {e}")
+                exit()
 
     def send_command(self, socket, msg, addr):
         message = msg.encode(Comms.FORMAT) # b'echo hello cormac'
@@ -113,14 +119,19 @@ class Client:
         socket.sendall(message)
 
     def handle_response(self, socket, filestream = False):
+        socket.setblocking(1)
         header = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
         code = header[0:2]
         response_flags = header[2:5]
-        print(header)
+        print(f"\nRECEIVED NEW PACKET")
+        print(f"HEADER: {header}")
 
         if code == Codes.EXECUTE_GET:
             length = int(header[2:-1])
-            return int(socket.recv(length).decode(Comms.FORMAT))
+            payload = int(socket.recv(length).decode(Comms.FORMAT))
+            print(f"EXEC COST: {payload}")
+            socket.setblocking(0)
+            return payload
 
         elif code == Codes.SUCCEED_RSP:
             length = int(header[5:-1])
@@ -128,15 +139,21 @@ class Client:
             if filestream:
                 filestream_flag = response_flags[0:2]
                 if filestream_flag == Codes.FILENAME:
-                    filename = socket.recv(length).decode(Comms.FORMAT)
-                    return filename
+                    payload = socket.recv(length).decode(Comms.FORMAT)
+                    print(f"FILENAME: {payload}")
+                    return payload
+                if filestream_flag == Codes.FILESIZE:
+                    payload = socket.recv(length).decode(Comms.FORMAT)
+                    print(f"FILESIZE: {payload}")
+                    return payload
 
             if response_flags[0] == Codes.STDOUTP:
-                stdout = socket.recv(length).decode(Comms.FORMAT)
-                print(stdout)
+                payload = socket.recv(length).decode(Comms.FORMAT)
+                print(f"STDOUT = {payload}")
 
                 if response_flags[1] == Codes.INCFILE:
                     self.receive_filestream(socket)
+                socket.setblocking(0)
 
         elif code == Codes.FAILURE_RSP:
             length = int(header[2:-1])
@@ -145,8 +162,6 @@ class Client:
             exit()
 
     def receive_filestream(self, socket):
-        # filestreams are blocking
-        socket.setblocking(1)
         # metadata packet
         header = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
         code = header[0:2]
@@ -157,22 +172,23 @@ class Client:
             # get filename
             self.send(socket, Codes.FILENAME, "", "")
             filename = self.handle_response(socket, True)
+            # get file size
+            self.send(socket, Codes.FILESIZE, "", "")
+            filesize = int(self.handle_response(socket, True))
             # get file
             self.send(socket, Codes.FILETRAN, "", "")
             # receive data and write to file https://www.thepythoncode.com/article/send-receive-files-using-sockets-python
             with open(filename, "wb") as f:
-                while True:
-                    data = socket.recv(Comms.MAX_LEN)
-                    if not data:    
-                        break
-                    f.write(data)
+                data = socket.recv(filesize)
+                f.write(data)
+            f.close()
             files_to_receive -= 1 
         socket.setblocking(0)
 
     def send_filestream(self, socket, files):
         print(f"sending filestream of {files}")
         print(os.getcwd())
-        #sockets are blocking
+        #filestreams are blocking
         socket.setblocking(1)
         #send filestream packet
         code = Codes.SUCCEED_RSP
@@ -190,7 +206,7 @@ class Client:
 
                 if filestream_code == Codes.FILENAME:
                     # send filename
-                    filestream_code = Codes.FILENAME
+                    filestream_code = Codes.FILENAME + Codes.FILETRN
                     filename_length = str(len(file))
                     padding = " " * (int(Comms.HEADER) - len(code) - len(filestream_code) - len(filename_length))
                     filename_packet = str(code + filestream_code + filename_length + padding + file)
@@ -198,7 +214,7 @@ class Client:
 
                 if filestream_code == Codes.FILESIZE:
                     # send filesize
-                    filestream_code = Codes.FILESIZE
+                    filestream_code = Codes.FILESIZE + Codes.FILETRN
                     filesize = str(os.path.getsize(file))
                     filesize_len = str(len(filesize))
                     padding = " " * (int(Comms.HEADER) - len(code) - len(filestream_code) - len(filesize_len))
@@ -338,13 +354,14 @@ if __name__ == '__main__':
     # Uses Parser object to populate client data.
     print("\n[r.p]\tInstantiating client.")
     client   = Client(rakefileData)
-
     print(client.ADDRS)
     ready = client.ADDRS
     watchlist = []
-    for actionset in client.ACTIONSETS: 
+    for actionset in client.ACTIONSETS:
+        print(f"\nEXECUTING ACTIONSET: {actionset}") 
         commands_sent = 0
         for msg in actionset:
+            print(f"\nEXECUTING ACTION: {msg}") 
             location, command, required = msg[0], msg[1], msg[2]
 
             if location == "remote":
