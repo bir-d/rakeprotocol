@@ -50,6 +50,7 @@ class Server:
             conn, addr = self.server.accept() # blocks til connected
             new_client = get_hostname(addr) 
             self.clients.append(new_client)
+            os.chdir(self.DIRPATH)
             self.dirs[new_client] = create_dir(f"{new_client}_tmp")
             
             thread = threading.Thread(target=self.manage_connection, args=(conn, addr))
@@ -59,7 +60,8 @@ class Server:
     def manage_connection(self, conn, addr):
         print(f"NEW: {get_hostname(addr)}")
         connected = True
-
+        os.chdir(self.DIRPATH)
+        os.chdir(self.dirs[get_hostname(addr)])
         try:
             while connected:
                 msg_type = conn.recv(2).decode(Comms.FORMAT) 
@@ -71,11 +73,11 @@ class Server:
                     print(f"Sending execution cost to '{get_hostname(addr)}'.")
                     code = Codes.EXECUTE_GET
                     cost = str(threading.active_count() - 1)
-                    length = str(len(cost))
-                    padding = " " * (int(Comms.HEADER) - len(code) - len(length) - len(cost))
-                    packet = str(code + length + padding + cost)
-                    print(packet)
-                    conn.sendall(packet.encode(Comms.FORMAT))
+                    payload_length = str(len(cost))
+                    padding = " " * (int(Comms.HEADER) - len(code) - len(payload_length))
+                    header = str(code + payload_length + padding)
+                    conn.sendall(header.encode(Comms.FORMAT))
+                    conn.sendall(cost.encode(Comms.FORMAT))
                 elif msg_type == Codes.REQUEST_MSG:
                     try:
                         self.receive_filestream(conn)
@@ -100,10 +102,11 @@ class Server:
         finally:
             conn.close()
 
+
     def execute_command(self, msg, addr, conn):
         print(f"[{addr[0]}:{str(addr[1])}]: > {msg}")
         message = msg.split()
-        # TODO: manages pipe messages
+        # TODO: error handling
         try:
             with subprocess.Popen(message, stdout=subprocess.PIPE) as proc:
                 result = proc.stdout.read()
