@@ -52,13 +52,15 @@ For each file that needs to be received, the client requests a filename, then re
 
 * FILENAME = !N
 * FILETRAN = !T
+* FILESIZE = !Z
 
 In general, filestream packets (aside from the metadata packet) don't use STDOUTP or INCFILE, so those two bytes are used for FILENAME or FILETRAN.
 
 ##### A quick example
 (`!SSI `) -- This is the standard output. Report it. We can see that `I` is set, meaning that there are incoming files. Lets receive the next 64 byte packet 
 (`!SSIF2`) -- This marks the start of the filestream. We can see that 2 files are to be received. We send off a filename req packet and receive:
-(`!S!NF10`, `output.txt`) -- We receive a 10 byte filename, `output.txt`. We send off a filetran request and keep reading until we read 0, and save that data to a file. We know from the metadata packet we have one more file to receive, so we repeat the process once more.
+(`!S!NF10`, `output.txt`) -- We receive a 10 byte filename, `output.txt`. We send off a filesize request next.
+(`!S!ZF5`, `36745`) -- We receive a 5 byte filesize, and the filesize is 36745 bytes. We send a filetran request and read `filesize` bytes, and save that data to a file. We know from the metadata packet we have one more file to receive, so we repeat the process once more.
 
 Store the standard output and any files, if any, on the client folder.
 

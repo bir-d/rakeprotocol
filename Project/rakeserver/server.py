@@ -26,6 +26,7 @@ class Codes:
     # filestream codes
     FILENAME    = "!N"
     FILETRAN    = "!T"
+    FILESIZE    = "!Z"
 
 class Server:
     def __init__(self, host, port):
@@ -124,8 +125,6 @@ class Server:
 
     def receive_filestream(self, socket):
         print("receiving filestream")
-        # filestreams are blocking
-        socket.setblocking(1)
         # metadata packet
         header = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
         code = header[0:2]
@@ -139,30 +138,39 @@ class Server:
             print("getting filename")
             socket.sendall(Codes.FILENAME.encode(Comms.FORMAT))
             print("sent filename req")
-            #have to manually get the header since we dont have handle_connection()
+
+            #have to manually get the packet since we dont have handle_connection()
             header = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
+            print(header)
             code = header[0:2]
             filestream_code = header[2:5]
-            length = int( header[5:-1] )
+            length = int( header[4:-1] )
+            print(length)
             filename = socket.recv(length).decode(Comms.FORMAT)
-            print(header, filename)
+            print(filename)
 
+            # get filesize
+            socket.sendall(Codes.FILESIZE.encode(Comms.FORMAT))
+            header = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
+            print(header)
+            code = header[0:2]
+            filestream_code = header[2:5]
+            length = int( header[4:-1] )
+            filesize = int(socket.recv(length).decode(Comms.FORMAT))
+            print(filesize)
 
             # get file
-            self.send(socket, Codes.FILETRAN, "", "")
+            print(f"sending file transfer request for {filename}")
+            socket.sendall(Codes.FILETRAN.encode(Comms.FORMAT))
+
             # receive data and write to file https://www.thepythoncode.com/article/send-receive-files-using-sockets-python
             with open(filename, "wb") as f:
-                while True:
-                    data = socket.recv(Comms.MAX_LEN)
-                    if not data:    
-                        break
-                    f.write(data)
+                data = socket.recv(filesize)
+                f.write(data)
+            f.close()
             files_to_receive -= 1 
-        socket.setblocking(0)
 
     def send_filestream(self, socket, files):
-        #sockets are blocking
-        socket.setblocking(1)
         #send filestream packet
         code = Codes.SUCCEED_RSP
         response_type = Codes.STDOUTP + Codes.INCFILE + Codes.FILETRN
@@ -192,7 +200,6 @@ class Server:
                         if not data:
                             break
                         socket.sendall(data)
-        socket.setblocking(0)
 
 def get_hostname(addr):
     return f"{addr[0]}:{str(addr[1])}"

@@ -28,6 +28,7 @@ class Codes:
     # filestream codes
     FILENAME    = "!N"
     FILETRAN    = "!T"
+    FILESIZE    = "!Z"
 
 
 # Client objects manage connections to servers in the Rakefile.
@@ -169,6 +170,7 @@ class Client:
 
     def send_filestream(self, socket, files):
         print(f"sending filestream of {files}")
+        print(os.getcwd())
         #sockets are blocking
         socket.setblocking(1)
         #send filestream packet
@@ -180,26 +182,37 @@ class Client:
         socket.sendall(filestream_packet.encode(Comms.FORMAT))
 
         for file in files:
-            # wait for filename request
-            header = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
-            code = header[0:2]
-            response_flags = header[2:5]
-            filestream_code = response_flags[0:2]
-            if filestream_code == Codes.FILENAME:
-                # send filename
-                filestream_code = Codes.FILENAME
-                filename_length = str(len(file))
-                padding = " " * (int(Comms.HEADER) - len(code) - len(filestream_code) - len(filename_length))
-                filename_packet = str(code + filestream_code + filename_length + padding + file)
-                socket.sendall(filename_packet.encode(Comms.FORMAT))
-            elif filestream_code == Codes.FILETRAN:
-                # send file https://www.thepythoncode.com/article/send-receive-files-using-sockets-python
-                with open(file, "rb") as f:
-                    while True:
-                        data = f.read(Comms.MAX_LEN)
-                        if not data:
-                            break
-                        socket.sendall(data)
+            for i in range(3):
+                # wait for filename request
+                header = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
+                filestream_code = header[0:2]
+
+                if filestream_code == Codes.FILENAME:
+                    # send filename
+                    filestream_code = Codes.FILENAME
+                    filename_length = str(len(file))
+                    padding = " " * (int(Comms.HEADER) - len(code) - len(filestream_code) - len(filename_length))
+                    filename_packet = str(code + filestream_code + filename_length + padding + file)
+                    socket.sendall(filename_packet.encode(Comms.FORMAT))
+
+                if filestream_code == Codes.FILESIZE:
+                    # send filesize
+                    filestream_code = Codes.FILESIZE
+                    filesize = str(os.path.getsize(file))
+                    filesize_len = str(len(filesize))
+                    padding = " " * (int(Comms.HEADER) - len(code) - len(filestream_code) - len(filesize_len))
+                    filesize_packet = str(code + filestream_code + str(len(filesize)) + padding + filesize)
+                    socket.sendall(filesize_packet.encode(Comms.FORMAT))
+
+                if filestream_code == Codes.FILETRAN:
+                    # send file https://www.thepythoncode.com/article/send-receive-files-using-sockets-python
+                    with open(file, "rb") as f:
+                        while True:
+                            data = f.read(Comms.MAX_LEN)
+                            if not data:
+                                break
+                            socket.sendall(data)
+                            
         socket.setblocking(0)
 
 # Creates an object from parsed Rakefile information. 
