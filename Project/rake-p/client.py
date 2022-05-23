@@ -116,6 +116,7 @@ class Client:
         header = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
         code = header[0:2]
         response_flags = header[2:5]
+        print(header)
 
         if code == Codes.EXECUTE_GET:
             length = int(header[2:-1])

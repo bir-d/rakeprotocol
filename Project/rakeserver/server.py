@@ -69,12 +69,13 @@ class Server:
                     connected = False
                 elif msg_type == Codes.EXECUTE_GET:
                     print(f"Sending execution cost to '{get_hostname(addr)}'.")
-                    cost = threading.active_count() - 1
-                    cost = str(cost).encode(Comms.FORMAT)
-                    send_len = str(len(cost)).encode(Comms.FORMAT)
-                    send_len += b' ' * (Comms.HEADER - len(send_len))
-                    conn.sendall(send_len)
-                    conn.sendall(cost)
+                    code = Codes.EXECUTE_GET
+                    cost = str(threading.active_count() - 1)
+                    length = str(len(cost))
+                    padding = " " * (int(Comms.HEADER) - len(code) - len(length) - len(cost))
+                    packet = str(code + length + padding + cost)
+                    print(packet)
+                    conn.sendall(packet.encode(Comms.FORMAT))
                 elif msg_type == Codes.REQUEST_MSG:
                     try:
                         self.receive_filestream(conn)
