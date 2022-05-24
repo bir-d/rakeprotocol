@@ -392,8 +392,8 @@ if __name__ == '__main__':
         print(f"ALL COMMANDS SENT FOR ACTIONSET {actionset}")
 
         while True:
-            print(f"readable: {readable}")
             readable = select.select(watchlist, [], [])[0]
+            print(f"readable: {readable}")
             if readable != []:
                 for sock in readable:
                     client.handle_response(sock)
@@ -403,10 +403,3 @@ if __name__ == '__main__':
 
             if commands_sent == 0:
                 break
-
-
-
-
-    
-    
-  
