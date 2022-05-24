@@ -126,7 +126,7 @@
 			+ determine location
 				* implement polling
 			+ send command to location
-			+ add socket to fdloop, add one to command counter
+			+ add socket to fdset, add one to command counter
 		+ While command counter > 0
 			* select() fdset
 			* for readable socket
