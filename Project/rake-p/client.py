@@ -335,7 +335,7 @@ def create_dir(dirName, v=True):
 if __name__ == '__main__':
     # assumption that the client is in its own folder, and the rake is in the 
     #   folder above the client's folder
-    default_path = "/".join(os.getcwd().split("/")[:-1]) + "/Rakefile"
+    default_path = os.path.join(os.getcwd(), "Rakefile")
 
     try:
         rakefile_path    = sys.argv[1]
