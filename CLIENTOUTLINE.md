@@ -99,7 +99,7 @@
 		
 
 ## Suggested path
-* Write Parser [x]
+* Write Parser []
 * Write Send command []
 	- Socket, code, options, padding, payload
 		+ Assemble packet to send
