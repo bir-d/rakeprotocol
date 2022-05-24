@@ -8,9 +8,7 @@ HOSTS = 127.0.0.1
 
 actionset1: 
 	sleep 5
-		requires team.txt
-	sleep 5
-		requires todo.md
+		requires vscode.deb totallysublime.deb
 	sleep 5
 actionset2: 
 	remote-echo client transfer completed
