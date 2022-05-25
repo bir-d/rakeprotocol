@@ -14,11 +14,11 @@ The first two bytes of the header is the "code", one of:
   - Client: Sends this to indicate to the server that it will need to receive files
   - Server: Prepares to receive files from the client
 * SUCCEED_RSP     = "!S"
-  - Client: Indicates success, should keep processing the packet and rakefile
-  - Server: Sends this to indicate execution was successful
+  - Client: Indicates success, should keep processing the packet and rakefile. Exit code equals 0 since otherwise it would be a FAILURE_RSP packet
+  - Server: Sends this to indicate execution was successful (exit code == 0)
 * FAILURE_RSP     = "!F"
-  - Client: Indicates failure, receive payload as stderr and terminate
-  - Server: Sends this to indicate execution was unsuccessful
+  - Client: Indicates failure, receive two packets, one containing the stderr and one containing the exit code.
+  - Server: Sends this to indicate execution was unsuccessful. Detect based on exit code.
 * EXECUTE_GET     = "!E"
   - Client: Sends this to get current amount of requests server is servicing
   - Server: Sends active thread count to client.
@@ -45,7 +45,7 @@ As an example, the client receiving a filestream might ask for the filename of o
 	Header: `!S!NF7[57 spaces]`
 	Payload: `Dog.txt`
 
-An example exchange between client and server, with the client sending a filestream of dog.txt(34 bytes) and feline.txt(88 bytes) to the server, as requirements.
+An example exchange between client and server, with the client sending a filestream of dog.txt(34 bytes) and feline.txt(88 bytes) to the server, as requirements. Note that all non file traffic is padded to 64 bytes with spaces, which is not shown here.
 
 ```
 |--------!R--------->| Indicate requirements
