@@ -318,7 +318,7 @@ class Parser:
                             pair.append(self.port)
                         self.hosts.append(":".join(pair)) # [0] hostname [1] port
             line = f.readline()
-        print("[parser]  Read completed.")
+        if v: print("[parser]  Read completed.")
 
 
 def create_dir(dirName, v=True):

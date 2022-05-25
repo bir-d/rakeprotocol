@@ -96,6 +96,7 @@ class Server:
                         msg = conn.recv(length).decode(Comms.FORMAT) 
                         self.execute_command(msg, addr, conn, required)
                         print(f"[{get_hostname(addr)}] Completed execution.")
+                        #connected = False
             self.disconnect_client(addr)
         except KeyboardInterrupt:
             print("[r.s]  Transmission halted by user. ")
@@ -274,9 +275,8 @@ class Server:
                 if filestream_code == Codes.FILETRAN:
                     # send file https://www.thepythoncode.com/article/send-receive-files-using-sockets-python
                     with open(file, "rb") as f:
-                        while True:
-                            data = f.read()
-                            socket.sendall(data)
+                        data = f.read()
+                        socket.sendall(data)
 
 
 def get_hostname(addr):
