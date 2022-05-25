@@ -1,3 +1,4 @@
+from email import header
 import os
 import socket
 import sys
@@ -61,28 +62,27 @@ class Client:
     def send(self, socket, type, addr, val):
         if type == Codes.COMMAND_MSG:
             try:
-                socket.sendall(type.encode(Comms.FORMAT))
-                self.send_command(socket, val, addr)
+                self.send_packet(socket, Codes.COMMAND_MSG, val)
                 print(f"[command@{self.get_hostname_from_socket(socket)}] > {val} ")
             except Exception as e:
                 print(f"Exception occurred while sending a command: {e}")
                 exit()
         elif type == Codes.EXECUTE_GET:
             try:
-                socket.sendall(type.encode(Comms.FORMAT))
+                self.send_packet(socket, Codes.EXECUTE_GET)
             except Exception as e:
                 print(f"Exception occurred while sending required files: {e}")
                 exit()
         elif type == Codes.REQUEST_MSG:
             try:
-                socket.sendall(type.encode(Comms.FORMAT))
+                self.send_packet(socket, Codes.REQUEST_MSG)
                 self.send_filestream(socket, val)
             except Exception as e:
                 print(f"Exception occurred while sending required files: {e}")
                 exit()
         elif type == Codes.DISCONN_MSG:
             try:
-                socket.sendall(type.encode(Comms.FORMAT))
+                self.send_packet(socket, Codes.DISCONN_MSG)
             except Exception as e:
                 print(f"Exception occurred while attempting to disconnect: {e}")
                 exit()
@@ -105,15 +105,15 @@ class Client:
                 print(f"Exception occurred while requesting file size: {e}")
                 exit()
 
-    def send_command(self, socket, msg, addr):
-        message = msg.encode(Comms.FORMAT) # b'echo hello cormac'
-        msg_length = len(message)  # int:17
-        send_length = str(msg_length).encode(Comms.FORMAT) # b'17'
-        send_length += b' ' * (Comms.HEADER - len(send_length)) 
-        # server: msg_length = conn.recv(Comms.HEADER).decode(Comms.FORMAT) 
-        socket.sendall(send_length)
-        #server: msg = conn.recv(msg_length).decode(Comms.FORMAT)
-        socket.sendall(message)
+    def send_packet(self, socket, code, payload = ""):
+        payload_length = str(len(payload))
+        padding = " " * (Comms.HEADER - len(code) - len(payload_length))
+        header = code + payload_length + padding
+
+        socket.sendall(header.encode(Comms.FORMAT))
+        if len(payload) != 0:
+            socket.sendall(payload.encode(Comms.FORMAT))
+
 
     def handle_response(self, socket, filestream = False):
         socket.setblocking(1)

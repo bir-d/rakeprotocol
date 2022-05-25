@@ -1,10 +1,8 @@
 import os
-import re
 import socket
 import threading
 import sys
 import subprocess
-import errno
 import shutil
 
 class Comms:
@@ -67,12 +65,15 @@ class Server:
         required = []
         try:
             while connected:
-                msg_type = conn.recv(2).decode(Comms.FORMAT) 
+                header = conn.recv(Comms.HEADER).decode(Comms.FORMAT)
+                msg_type = header[0:2]
                 print(msg_type)
                 if msg_type == Codes.DISCONN_MSG:
+                    # Should be empty anyways, so meaningless name
                     print(f"Disconnecting from client at '{get_hostname(addr)}'.")
                     connected = False
                 elif msg_type == Codes.EXECUTE_GET:
+                    # Should be empty anyways, so meaningless name
                     print(f"Sending execution cost to '{get_hostname(addr)}'.")
                     code = Codes.EXECUTE_GET
                     cost = str(threading.active_count() - 1)
@@ -82,18 +83,17 @@ class Server:
                     conn.sendall(header.encode(Comms.FORMAT))
                     conn.sendall(cost.encode(Comms.FORMAT))
                 elif msg_type == Codes.REQUEST_MSG:
+                    # Should be empty anyways, so meaningless name
                     try:
                         required = self.receive_filestream(conn, True)
                     except:
                         connected = False
                 else:
-                    # client: socket.sendall(send_length)
-                    msg_length = conn.recv(Comms.HEADER).decode(Comms.FORMAT) 
-                    msg_length = int(msg_length) 
-
                     if msg_type == Codes.COMMAND_MSG:
+                    # client: socket.sendall(send_length)
+                        length = int(header[2:-1])
                         # client: socket.sendall(message)
-                        msg = conn.recv(msg_length).decode(Comms.FORMAT) 
+                        msg = conn.recv(length).decode(Comms.FORMAT) 
                         self.execute_command(msg, addr, conn, required)
                         print(f"[{get_hostname(addr)}] Completed execution.")
             self.disconnect_client(addr)
