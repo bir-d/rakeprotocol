@@ -29,15 +29,16 @@ class Codes:
     FILESIZE    = "!Z"
 
 class Server:
-    def __init__(self, host, port):
+    def __init__(self, host, port, v=False):
         self.HOST, self.PORT, self.SERVER = host, int(port), f"{host}:{port}"
         self.ADDR       = (host, int(port))
         self.DIRPATH    = os.path.abspath(os.getcwd()) 
 
+        self.v = v
         self.clients = list()
         self.dirs = dict()  # dirs[CLIENTHOST] = directory/path/of/client/files 
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        print("[server]  Initialised rakeserver instance.")
+        print("[server]  Initialised rakeserver instance.\n")
 
         self.server.bind(self.ADDR)
         self.listen_to_socket()
@@ -57,24 +58,24 @@ class Server:
             
             thread = threading.Thread(target=self.manage_connection, args=(conn, addr))
             thread.start()
-            print(f"(active: {threading.activeCount() - 1})\n")
+            if self.v: print(f"(active: {threading.activeCount() - 1})\n")
 
     def manage_connection(self, conn, addr):
-        print(f"NEW: {get_hostname_from_socket(conn)}")
+        if self.v: print(f"NEW: {get_hostname_from_socket(conn)}")
         connected = True
         required = []
         try:
             while connected:
                 header = conn.recv(Comms.HEADER).decode(Comms.FORMAT)
                 msg_type = header[0:2]
-                print(msg_type)
+                if self.v: print(msg_type)
                 if msg_type == Codes.DISCONN_MSG:
                     # Should be empty anyways, so meaningless name
-                    print(f"Disconnecting from client at '{get_hostname(addr)}'.")
+                    if self.v: print(f"[{get_hostname(addr)}]\tDisconnecting from client.\n")
                     connected = False
                 elif msg_type == Codes.EXECUTE_GET:
                     # Should be empty anyways, so meaningless name
-                    print(f"Sending execution cost to '{get_hostname(addr)}'.")
+                    if self.v: print(f"[{get_hostname(addr)}]\tSending execution cost.\n")
                     code = Codes.EXECUTE_GET
                     cost = str(threading.active_count() - 1)
                     payload_length = str(len(cost))
@@ -95,8 +96,7 @@ class Server:
                         # client: socket.sendall(message)
                         msg = conn.recv(length).decode(Comms.FORMAT) 
                         self.execute_command(msg, addr, conn, required)
-                        print(f"[{get_hostname(addr)}] Completed execution.")
-                        #connected = False
+                        if self.v: print(f"[{get_hostname(addr)}] Completed execution.\n")
             self.disconnect_client(addr)
         except KeyboardInterrupt:
             print("[r.s]  Transmission halted by user. ")
@@ -109,24 +109,31 @@ class Server:
 
     def execute_command(self, msg, addr, conn, required = []):
         os.chdir(get_socket_dir(conn, self.dirs))
-        print(f"EXECUTING COMMAND {msg} IN DIRECTORY {os.getcwd()} FOR {get_hostname_from_socket(conn)}")
-        print(f"[{addr[0]}:{str(addr[1])}]: > {msg}")
+        if self.v: print(f"EXECUTING COMMAND {msg} IN DIRECTORY {os.getcwd()} FOR {get_hostname_from_socket(conn)}")
+        if self.v: print(f"[{addr[0]}:{str(addr[1])}]: > {msg}")
         message = msg.split()
         generated_files = []
         # TODO: error handling
         try:
+            print(f"\n[command@{get_hostname(addr)}] > {msg}")
             with subprocess.Popen(message, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=get_socket_dir(conn, self.dirs)) as proc:
                 stdout, stderr = proc.communicate()
                 if isinstance(stdout, bytes):
                     stdout = stdout.decode(Comms.FORMAT)
+                    if len(stdout) != 0:
+                        print(f"[command@{get_hostname(addr)}] > stdout: "+ stdout)
+                    else:
+                        if self.v: print(f"[command@{get_hostname(addr)}] > No stdout to report.")
+
                 if isinstance(stderr, bytes):
                     stderr = stderr.decode(Comms.FORMAT)
-                print(f"Type of stdout: {type(stdout)}")
-                print(f"Type of stderr: {type(stderr)}")
-                print("stdout: "+ stdout)
-                print("stderr: "+ stderr)
+                    if len(stderr) != 0:
+                        print(f"[command@{get_hostname(addr)}] > stderr: "+ stderr)
+                    else:
+                        if self.v: print(f"[command@{get_hostname(addr)}] > No stderr to report.")
+
                 exit_code = proc.returncode
-                print(f"return code: {exit_code}")
+                if self.v: print(f"[command@{get_hostname(addr)}] > return code: {exit_code}")
             
             if exit_code == 0:
                 code = Codes.SUCCEED_RSP
@@ -136,7 +143,7 @@ class Server:
                 for file in directory_contents:
                     if file not in required:
                         generated_files.append(get_socket_dir(conn, self.dirs) + file)
-                        print(f"Generated file detected: {file}")
+                        if self.v: print(f"[command@{get_hostname(addr)}] > Generated file detected: {file}")
                 # Set incfile flag based on if generated files were detected
                 if generated_files != []:
                     options = Codes.STDOUTP + Codes.INCFILE + " "
@@ -166,13 +173,13 @@ class Server:
 
     def disconnect_client(self, addr):
         self.clients.remove(get_hostname(addr))
-        print(f"CLEANING UP {get_hostname(addr)}")
+        if self.v: print(f"CLEANING UP {get_hostname(addr)}")
         shutil.rmtree(self.dirs[get_hostname(addr)], ignore_errors=True)
         self.dirs.pop(get_hostname(addr))
 
     # citation: https://stackoverflow.com/a/17668009
     def recvall(self, sock, n):
-        print(f"receiving {n} bytes from socket")
+        if self.v: print(f"receiving {n} bytes from socket")
         # Helper function to recv n bytes or return None if EOF is hit
         data = bytearray()
         while len(data) < n:
@@ -184,45 +191,40 @@ class Server:
 
     def receive_filestream(self, socket, return_received = False):
         os.chdir(self.dirs[get_hostname_from_socket(socket)])
-        print(f"receiving filestream from {get_hostname_from_socket(socket)}. I am in {os.getcwd()}")
-        print("receiving filestream")
+        if self.v: print(f"[filestream]\treceiving filestream from {get_hostname_from_socket(socket)}. I am in {os.getcwd()}")
         received_files = []
         # metadata packet
         header = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
         code = header[0:2]
         response_flags = header[2:5]
         files_to_receive = int(header[5:-1])
-        print(header, files_to_receive)
         # receive the files
-        print(files_to_receive > 0)
         while files_to_receive > 0:
+            if self.v: print(f"[filestream]\t{files_to_receive} files to receive")
             # get filename
-            print("getting filename")
+            if self.v: print("[filestream]\tgetting filename")
             socket.sendall(Codes.FILENAME.encode(Comms.FORMAT))
-            print("sent filename req")
+            if self.v: print("[filestream]\tsent filename req")
 
             #have to manually get the packet since we dont have handle_connection()
             header = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
-            print(header)
             code = header[0:2]
             filestream_code = header[2:5]
             length = int( header[5:-1] )
-            print(length)
             filename = socket.recv(length).decode(Comms.FORMAT)
-            print(filename)
+            if self.v: print(f"[filestream]\tfilename: {filename}")
 
             # get filesize
             socket.sendall(Codes.FILESIZE.encode(Comms.FORMAT))
             header = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
-            print(header)
             code = header[0:2]
             filestream_code = header[2:5]
             length = int( header[5:-1] )
             filesize = int(socket.recv(length).decode(Comms.FORMAT))
-            print(filesize)
+            if self.v: print(f"[filestream]\tfilesize: {filesize}")
 
             # get file
-            print(f"sending file transfer request for {filename}")
+            if self.v: print(f"[filestream]\tsending file transfer request for {filename}")
             socket.sendall(Codes.FILETRAN.encode(Comms.FORMAT))
 
             # receive data and write to file https://www.thepythoncode.com/article/send-receive-files-using-sockets-python
@@ -230,7 +232,7 @@ class Server:
                 data = self.recvall(socket, filesize)
                 f.write(data)
             f.close()
-            print("file received")
+            if self.v: print("[filestream]\tfile received")
 
             received_files.append(filename)
             files_to_receive -= 1 
@@ -238,8 +240,7 @@ class Server:
             return received_files
 
     def send_filestream(self, socket, files):
-        print(f"sending filestream of {files}")
-        print(os.getcwd())
+        if self.v: print(f"[filestream]\tsending filestream of {files}")
         #send filestream packet
         code = Codes.SUCCEED_RSP
         response_type = Codes.STDOUTP + Codes.INCFILE + Codes.FILETRN
@@ -303,12 +304,18 @@ def get_socket_dir(socket, dirs):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 3:
-        print("[r.s]\tArgument error; usage <host> <port>")
+    try:
+        v = sys.argv[3]
+        print("[r.p]\tVerbose mode enabled.\n")
+    except IndexError:
+        v = False
+        print("[r.p]\tVerbose mode disabled. Enable by passing either `1` or `True` as argv[3]\n")
+    if len(sys.argv) < 3:
+        print("[r.s]\tArgument error; usage <host> <port> [verbose]")
         sys.exit(1)
 
     # Create server object
-    server   = Server(sys.argv[1], sys.argv[2])
+    server   = Server(sys.argv[1], sys.argv[2], v)
 
 
   
