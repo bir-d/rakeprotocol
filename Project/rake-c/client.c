@@ -72,8 +72,10 @@ typedef struct SERVER
 {
     char full_host[MAX_NAME_LEN];      
     char host[MAX_NAME_LEN];   
-    int port;             
-
+    int port;
+    bool local;
+    int sockfd;
+    int cost;
 } SERVER;
 
 typedef struct HEADER
@@ -90,6 +92,14 @@ typedef struct HEADER
 
 ACTIONSET   actionsets[MAX_COMMANDS];
 SERVER      servers[MAX_SERVERS];
+int         numServers = 0;
+int         server_index_cost_array[MAX_SERVERS];
+
+HEADER EXEC_COST_HEADER = {
+        .code = EXECUTE_GET,
+        .flags = NULL,
+        .length = NULL
+};
 
 
 // -----------------------------------------------------------------------------
@@ -127,6 +137,7 @@ int read_rakefile(FILE *rake_fp)
             while (token != NULL)
             {
                 server_index++;
+                numServers++;
                 strcpy(servers[server_index].full_host, token);
                 token = strtok(NULL, " ");
                 if (strchr(servers[server_index].full_host, ':') == NULL)
@@ -148,6 +159,14 @@ int read_rakefile(FILE *rake_fp)
                     sprintf(servers[server_index].full_host, "%s", host_token);
                     sprintf(servers[server_index].full_host, "%s:%s", servers[server_index].full_host, port_token);
                     servers[server_index].port = atoi(port_token);
+                }
+                if (strcmp(servers[server_index].host, "localhost") == 0 || strcmp(servers[server_index].host, "127.0.0.1") == 0)
+                {
+                    servers[server_index].local = true;
+                }
+                else
+                {
+                    servers[server_index].local = false;
                 }
             }
         }
@@ -179,13 +198,19 @@ int read_rakefile(FILE *rake_fp)
             // determines whether line is remote or locally executed
             if (strncmp(linebuf, "\tremote-", 8) == 0)
             {
-                strcpy(actionsets[actionset_index].commands[command_index].location, "remote");
-                strcpy(actionsets[actionset_index].commands[command_index].command, linebuf + 8);
+                COMMAND command = {
+                    .location = "remote",
+                    .command = linebuf + strlen("\tremote-")
+                };
+                actionsets->commands[command_index] = command;
             }
             else
             {
-                strcpy(actionsets[actionset_index].commands[command_index].location, "local");
-                strcpy(actionsets[actionset_index].commands[command_index].command, linebuf + 1);
+                COMMAND command = {
+                    .location = "remote",
+                    .command = linebuf + 1
+                };
+                actionsets->commands[command_index] = command;
             }
         }
     }
@@ -240,10 +265,11 @@ int connect_socket(char *host, int port)
 // -----------------------------------------------------------------------------
 
 // Manages the approach to take by the servers header received.
-int manage_response(HEADER receive){
+int manage_response(HEADER receive, SERVER server){
     if (receive.code == EXECUTE_GET)
     {
-        // handle  execcost response
+        server.cost = receive.length;
+        return 1;
     }
     else if (receive.code == SUCCEED_RSP)
     {
@@ -267,6 +293,134 @@ int manage_response(HEADER receive){
     }
 }
 
+// int *find_remote(){
+//     int r_serv_i[numServers];
+//     int index = 0;
+//     for (int i = 0; i < numServers; i++)
+//     {
+//         if (strcmp(servers[i].host, "") != 0 && strcmp(servers[i].host, "localhost") != 0 && strcmp(servers[i].host, "127.0.0.1") != 0){
+//             r_serv_i[index] = i;
+//             index++;
+//         }
+//     }
+//     r_serv_i[index] = -1;
+//     return r_serv_i;
+// }
+
+// int *find_local(){
+//     int l_serv_i[numServers];
+//     int index = 0;
+//     for (int i = 0; i < numServers; i++)
+//     {
+//         if (strcmp(servers[i].host, "") != 0 && strcmp(servers[i].host, "localhost") == 0 || strcmp(servers[i].host, "127.0.0.1") == 0)
+//         {
+//             l_serv_i[index] = i;
+//             index++;
+//         }
+//     }
+//     l_serv_i[index] = -1;
+//     return l_serv_i;
+// }
+
+
+
+int exec_command(COMMAND comm, bool local){
+    int try_index = server_index_cost_array[0];
+    SERVER executor = servers[try_index];
+
+    for (int i = 0; i < numServers; i++)
+    {
+        if (executor.local == local)
+        {
+            printf("[r.c] Server selected: %s\n", executor.full_host);
+            send_header(executor.sockfd, EXECUTE_GET, comm.command);
+            return 1;
+        }
+        else {
+            try_index++;
+            SERVER executor = servers[try_index];
+        }
+    }
+    return -1;
+}
+
+// Given actionset, attempts to execute all commands in the set.
+int manage_commands(ACTIONSET actionset)
+{
+    // update_server_costs();
+
+    for (int i = 0; i < actionset.num_actions; i++)
+    {
+        COMMAND comm = actionset.commands[i];
+
+        if (strcmp(comm.location, "remote") == 0)
+        {
+            printf("[r.c] Executing remote command:\n > %s\n", comm.command);
+            exec_command(comm, false);
+
+        }
+        else if (strcmp(comm.location, "local") == 0)
+        {
+            printf("[r.c] Executing local command:\n > %s\n", comm.command);
+            exec_command(comm, true);
+        }
+        else {
+            printf("[r.c] Error: Unknown command location.");
+            return -1;
+        }
+    }
+}
+
+int manage_actionsets(){
+    for (int set_index = 0; set_index < MAX_ACTIONSETS; set_index++)
+    {
+        if (actionsets[set_index].num_actions > 0)
+        {
+            if (manage_commands(actionsets[set_index]) != EXIT_SUCCESS)
+            {
+                printf("[r.c] Error: Failed to execute actionset.\n");
+                return EXIT_FAILURE;
+            }
+        }
+    }
+}
+
+int connect_servers() {
+    for (int s_i = 0; s_i < numServers; s_i++)
+    {
+        // add a new socket to the server
+        servers[s_i].sockfd = connect_socket(servers[s_i].host, servers[s_i].port);
+        
+        // send message to server on new socket
+        send_header(servers[s_i].sockfd, EXEC_COST_HEADER.code, NULL);
+
+        // receive response from server
+        HEADER receive = receive_header(servers[s_i].sockfd, &receive);
+
+        // handle server response
+        manage_response(receive, servers[s_i]);
+
+        // // update costs
+        // server_index_cost_array = get_cost_list(numServers);
+    }
+}
+
+// int update_server_costs() {
+//     for (int s_i = 0; s_i < numServers; s_i++)
+//     {
+//         // send message to server on new socket
+//         send_header(servers[s_i].sockfd, EXEC_COST_HEADER.code, NULL);
+
+//         // receive response from server
+//         HEADER receive = receive_header(servers[s_i].sockfd, &receive);
+
+//         // handle server response
+//         manage_response(receive, servers[s_i]);
+        
+//         // update costs
+//         server_index_cost_array = get_cost_list(numServers);
+//     }
+// }
 
 // -----------------------------------------------------------------------------
 // SENDING FUNCTIONS
@@ -437,6 +591,44 @@ void print_servers()
     }
 }
 
+
+// -----------------------------------------------------------------------------
+// UTILITY FUNCTIONS
+// -----------------------------------------------------------------------------
+
+void swap(int *x, int *y)
+{
+    int tmp = *x;
+    *x = *y;
+    *y = tmp;
+}
+
+void sort(int costs[], int n)
+{
+    int i, j, min_idx;
+
+    for (i = 0; i < n - 1; i++)
+    {
+        min_idx = i;
+        for (j = i + 1; j < n; j++)
+            if (costs[j] < costs[min_idx])
+                min_idx = j;
+
+        swap(&costs[min_idx], &costs[i]);
+    }
+}
+
+int* get_cost_list(int num_servers)
+{
+    int costs[num_servers];
+    for (int i = 0; i < num_servers; i++)
+    {
+        costs[i] = servers[i].cost;
+    }
+    sort(costs, num_servers);
+    return costs;
+}
+
 // -----------------------------------------------------------------------------
 // MAIN
 // -----------------------------------------------------------------------------
@@ -475,6 +667,8 @@ int main(int argc, char *argv[])
     print_actionsets();
     print_servers();
 
+
+    
     
 
     return EXIT_SUCCESS;
