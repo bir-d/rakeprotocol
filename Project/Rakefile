@@ -3,7 +3,7 @@
 # Comment 3
 
 PORT  = 5000
-HOSTS = 127.0.0.1
+HOSTS = 127.0.0.1 192.168.0.28:5000
 
 
 actionset1: 

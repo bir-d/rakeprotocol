@@ -1,0 +1,6 @@
+make --dry-run --always-make --keep-going --print-directory
+make: Entering directory `/Users/jamiemccullough/Library/Mobile Documents/com~apple~CloudDocs/Documents/University/Semesters/2022-s1/Networks Project'
+make: Leaving directory `/Users/jamiemccullough/Library/Mobile Documents/com~apple~CloudDocs/Documents/University/Semesters/2022-s1/Networks Project'
+ 
+make: *** No targets specified and no makefile found.  Stop.
+

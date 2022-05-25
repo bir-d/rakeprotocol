@@ -35,6 +35,7 @@ typedef struct ACTIONSET
 
 typedef struct SERVER
 {
+    char full_host[MAX_NAME_LEN];      
     char host[MAX_NAME_LEN];   
     int port;             
 
@@ -77,16 +78,33 @@ int read_rakefile(FILE *rake_fp)
         // finds host servers and stores in server array
         else if (strncmp(linebuf, "HOST", strlen("HOST")) == 0)
         {
-            char *token = strtok(linebuf + strlen("HOST = "), " ");
+            char *token = strtok(linebuf + strlen("HOSTS = "), " ");
             while (token != NULL)
             {
                 server_index++;
-                strcpy(servers[server_index].host, token);
+                strcpy(servers[server_index].full_host, token);
                 token = strtok(NULL, " ");
-                if (strchr(servers[server_index].host, ':') == NULL)
+                if (strchr(servers[server_index].full_host, ':') == NULL)
                 {
-                    sprintf(servers[server_index].host, "%s:%d", servers[server_index].host, default_port);
+                    // combine server host with default port
+                    char port_str[10];
+                    sprintf(port_str, "%d", default_port);
+                    servers[server_index].port = default_port;
+                    strcpy(servers[server_index].host, servers[server_index].full_host);
+                    strcat(servers[server_index].full_host, ":");
+                    strcat(servers[server_index].full_host,  port_str);
                 }
+                else if (strchr(servers[server_index].full_host, ':') != NULL)
+                {
+                    // split server host into host and port
+                    char *host_token = strtok(servers[server_index].full_host, ":");
+                    char *port_token = strtok(NULL, ":");
+                    sprintf(servers[server_index].host, "%s", host_token);
+                    sprintf(servers[server_index].full_host, "%s", host_token);
+                    sprintf(servers[server_index].full_host, "%s:%s", servers[server_index].full_host, port_token);
+                    servers[server_index].port = atoi(port_token);
+                }
+                
                 // printf("> parse: found host '%s'\n", servers[server_index].host);
             }
         }
@@ -195,7 +213,7 @@ void print_servers()
     {
         if (strcmp(servers[i].host, "") != 0)
         {
-            printf("\t(%d) %s\n", i + 1, servers[i].host);
+            printf("\t(%d) %s:%d (%s)\n", i + 1, servers[i].host, servers[i].port, servers[i].full_host);
         }
     }
 }
