@@ -71,9 +71,9 @@
 
 typedef struct COMMAND
 {
-    char location[MAX_NAME_LEN];    // remote/local
-    char command[MAX_NAME_LEN];     // command to execute
-    char requires[MAX_COMMANDS][MAX_NAME_LEN];    // files needed for execution
+    char *location[MAX_NAME_LEN];    // remote/local
+    char *command;     // command to execute
+    char *requires;    // files needed for execution
 } COMMAND;
 
 typedef struct ACTIONSET
@@ -188,51 +188,55 @@ int read_rakefile(FILE *rake_fp)
         else if (strncmp(linebuf, "actionset", strlen("actionset")) == 0)
         {
             actionset_index++;
-            command_index = -1;
-            requires_index = -1;
+            command_index = 0;
+            requires_index = 0;
         }
         // finds requirements of lines
-        else if (linebuf[0] == '\t' && linebuf[1] == '\t')
-        {
-            // split line on space and store in array
-            char *token = strtok(linebuf + 2 + strlen("requires"), " ");
-
-            while (token != NULL)
-            {
-                requires_index++;
-                strcpy(actionsets[actionset_index].commands[command_index].requires[requires_index], token);
-                token = strtok(NULL, " ");
-            }
-        }
-        // finds commands in rakefile
         else if (linebuf[0] == '\t')
         {
-            command_index++;
-            actionsets[actionset_index].num_actions++;
+            if (linebuf[1] == '\t'){
 
-            // determines whether line is remote or locally executed
-            if (strncmp(linebuf, "\tremote-", 8) == 0)
-            {
-                char *comm;
-                comm = strtok(linebuf + 8, " ");
-
-
-                COMMAND command = {
-                    .location = "remote",
-                    .command = *comm};
-                actionsets->commands[command_index] = command;
+                // // split line on space and store in array
+                // char *token = strtok(linebuf + 2 + strlen("requires"), " ");
+                
+                // while (token != NULL)
+                // {
+                //     // strcpy(actionsets[actionset_index].commands[command_index].requires[requires_index], token);
+                //     token = strtok(NULL, " ");
+                //     requires_index++;
+                // }
             }
-            else
-            {                
-                char *comm;
-                comm = strtok(linebuf, " ");
+            else 
+            {
+                printf("CMD");
+
+                actionsets[actionset_index].num_actions++;
+
+                // determines whether line is remote or locally executed
+                if (strncmp(linebuf, "\tremote-", 8) == 0)
+                {
+                    char *comm;
+                    strncpy(comm, linebuf + strlen("\tremote-"),  strlen(linebuf) - strlen("\tremote-"));
 
 
-                COMMAND command = {
-                    .location = "local",
-                    .command = *comm
-                };
-                actionsets->commands[command_index] = command;
+                    COMMAND command = {
+                        .location = "remote",
+                        .command = comm};
+                    actionsets[actionset_index].commands[command_index] = command;
+
+                }
+                else
+                {
+                    char *comm;
+                    strncpy(comm, linebuf + strlen("\t"), strlen(linebuf) - strlen("\t"));
+
+                    COMMAND command = {
+                        .location = "local",
+                        .command = comm
+                    };
+                    actionsets[actionset_index].commands[command_index] = command;
+                }
+                command_index++;
             }
         }
     }
@@ -501,6 +505,7 @@ void print_servers()
         }
     }
 }
+
 
 // -----------------------------------------------------------------------------
 // COMMUNICATION MANAGEMENT
