@@ -33,7 +33,7 @@ The next three bytes are "options", only used on successful execution responses.
 Finally, the next bytes indicate the length of the payload, and the rest of the header is padded out to 64 bytes total with spaces.
 
 ## Filestream protocol
-Filestreams are just multiple files to be sent and received by a client and server. Each filestream consists of a metadata packet, and for each file, packets for filename, filesize, and for transfer confirmation. Filestreams use one of these codes in replacement of the first two bytes of the "options", with the last byte of options set to F to indicate that it is a filestream packet.
+Filestreams are just multiple files to be sent and received by a client and server. Each filestream consists of a metadata packet, and for each file, packets for filename, filesize, and for transfer confirmation. Filestreams use one of these codes in replacement of the first two bytes of the "options", with the last byte of options set to F to indicate that it is a filestream packet. The metadata packet is distinguished by having all three normal options set, e.g `!S` + `SIF` + payload length + padding
 
     FILENAME    = "!N"
     FILETRAN    = "!T"
