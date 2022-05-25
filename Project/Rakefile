@@ -3,14 +3,14 @@
 # Comment 3
 
 PORT  = 5000
-HOSTS = 127.0.0.1 192.168.0.28:5000
+HOSTS = 127.0.0.1
 
 
 actionset1: 
-	sleep 5
+	echo hi
 		requires vscode.deb totallysublime.deb
 	sleep 5
 actionset2: 
-	remote-echo client transfer completed
+	echo client transfer completed
 
 

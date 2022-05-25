@@ -2,6 +2,7 @@
     "files.associations": {
         "*.rmd": "markdown",
         "Rakefile": "makefile",
-        "inet.h": "c"
+        "inet.h": "c",
+        "stdio.h": "c"
     }
 }

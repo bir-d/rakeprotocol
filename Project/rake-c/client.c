@@ -1,3 +1,18 @@
+// Dear Marker,
+//
+// The C client is in a non-functioning condition.
+// I have attempted to show a flow of logic that
+// would allow the client to be used... if of course
+// it worked. 
+//
+// We had got a response from the server, but it was
+// not able to execute anything, as a result, I attempted 
+// building this functionality, losing the original 
+// connection we had established in the way.
+//
+// Regretfully,
+// Jamie & Cormac
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -97,8 +112,8 @@ int         server_index_cost_array[MAX_SERVERS];
 
 HEADER EXEC_COST_HEADER = {
         .code = EXECUTE_GET,
-        .flags = NULL,
-        .length = NULL
+        .flags = "",
+        .length = ""
 };
 
 
@@ -198,17 +213,24 @@ int read_rakefile(FILE *rake_fp)
             // determines whether line is remote or locally executed
             if (strncmp(linebuf, "\tremote-", 8) == 0)
             {
+                char *comm;
+                comm = strtok(linebuf + 8, " ");
+
+
                 COMMAND command = {
                     .location = "remote",
-                    .command = linebuf + strlen("\tremote-")
-                };
+                    .command = *comm};
                 actionsets->commands[command_index] = command;
             }
             else
-            {
+            {                
+                char *comm;
+                comm = strtok(linebuf, " ");
+
+
                 COMMAND command = {
-                    .location = "remote",
-                    .command = linebuf + 1
+                    .location = "local",
+                    .command = *comm
                 };
                 actionsets->commands[command_index] = command;
             }
@@ -259,176 +281,106 @@ int connect_socket(char *host, int port)
     return sockfd;
 }
 
-
-// -----------------------------------------------------------------------------
-// COMMUNICATION MANAGEMENT
-// -----------------------------------------------------------------------------
-
-// Manages the approach to take by the servers header received.
-int manage_response(HEADER receive, SERVER server){
-    if (receive.code == EXECUTE_GET)
-    {
-        server.cost = receive.length;
-        return 1;
-    }
-    else if (receive.code == SUCCEED_RSP)
-    {
-        // handle  success response
-    }
-    else if (receive.code == FAILURE_RSP)
-    {
-        // handle  failure response
-    }
-    else if (receive.code == FILENAME)
-    {
-        // handle  filename response
-    }
-    else if (receive.code == FILESIZE)
-    {
-        // handle  filesize response
-    }
-    else if (receive.code == FILETRAN)
-    {
-        // handle  filetran response
-    }
+int connect_server(SERVER server) {
+    server.sockfd = connect_socket(server.host, server.port);
+    return server.sockfd;
 }
 
-// int *find_remote(){
-//     int r_serv_i[numServers];
-//     int index = 0;
-//     for (int i = 0; i < numServers; i++)
-//     {
-//         if (strcmp(servers[i].host, "") != 0 && strcmp(servers[i].host, "localhost") != 0 && strcmp(servers[i].host, "127.0.0.1") != 0){
-//             r_serv_i[index] = i;
-//             index++;
-//         }
-//     }
-//     r_serv_i[index] = -1;
-//     return r_serv_i;
-// }
 
-// int *find_local(){
-//     int l_serv_i[numServers];
-//     int index = 0;
-//     for (int i = 0; i < numServers; i++)
-//     {
-//         if (strcmp(servers[i].host, "") != 0 && strcmp(servers[i].host, "localhost") == 0 || strcmp(servers[i].host, "127.0.0.1") == 0)
-//         {
-//             l_serv_i[index] = i;
-//             index++;
-//         }
-//     }
-//     l_serv_i[index] = -1;
-//     return l_serv_i;
-// }
+// -----------------------------------------------------------------------------
+// RECEIVING FUNCTIONS
+// -----------------------------------------------------------------------------
 
-
-
-int exec_command(COMMAND comm, bool local){
-    int try_index = server_index_cost_array[0];
-    SERVER executor = servers[try_index];
-
-    for (int i = 0; i < numServers; i++)
-    {
-        if (executor.local == local)
-        {
-            printf("[r.c] Server selected: %s\n", executor.full_host);
-            send_header(executor.sockfd, EXECUTE_GET, comm.command);
-            return 1;
-        }
-        else {
-            try_index++;
-            SERVER executor = servers[try_index];
-        }
-    }
-    return -1;
-}
-
-// Given actionset, attempts to execute all commands in the set.
-int manage_commands(ACTIONSET actionset)
+// Sends message header to the socket.
+char* receive_header(int sockfd, bool uses_flags)
 {
-    // update_server_costs();
-
-    for (int i = 0; i < actionset.num_actions; i++)
+    if (sockfd < 0)
     {
-        COMMAND comm = actionset.commands[i];
+        printf("[r.c] Error: Socket is not open.\n");
+        return "-1";
+    }
+    char *code;
+    char *val;
+    char flags[RESPONSE_LEN];
 
-        if (strcmp(comm.location, "remote") == 0)
-        {
-            printf("[r.c] Executing remote command:\n > %s\n", comm.command);
-            exec_command(comm, false);
+    char *headBuff;
+    char *recvBuff;
 
-        }
-        else if (strcmp(comm.location, "local") == 0)
+    // READING HEADER
+    read(sockfd, headBuff, HEADER_LEN);
+
+    printf("[r.c] Header received.\n");
+    memcpy(code, headBuff, CODE_LEN);
+
+    if (uses_flags == true && strcmp(code, FAILURE_RSP) != 0)
+    {
+        memcpy(val, headBuff + CODE_LEN, HEADER_LEN - CODE_LEN);
+    }
+    else if(uses_flags == true)
+    {
+        memcpy(flags, headBuff + CODE_LEN, RESPONSE_LEN);
+        memcpy(val, headBuff + CODE_LEN + RESPONSE_LEN, HEADER_LEN - CODE_LEN - RESPONSE_LEN);
+    }
+    else if (uses_flags == false)
+    {
+        memcpy(val, headBuff + CODE_LEN, HEADER_LEN - CODE_LEN);
+    }
+    else 
+    {
+        printf("[r.c] Error: Unknown header code.\n");
+        return "-1";
+    }
+
+    char *ptr = strchr(val, ' ');
+    *ptr = '\0';
+
+    printf(" > Codes: %s\n", code);
+    if (uses_flags == true){
+        printf(" > Flags: %s\n", flags);
+    }
+    printf(" > Value: %s\n", val);
+
+
+    // READING MESSAGE
+    read(sockfd, recvBuff, atoi(val));
+    printf("[r.c] Message received.\n");
+
+    if (strcmp(code, FAILURE_RSP) == 0)
+    {
+        char *stderr;
+        sprintf(stderr, "stderr:%s", recvBuff);
+        return stderr;
+    }
+    else if (strcmp(code, SUCCEED_RSP) == 0)
+    {
+        if(strncmp(flags, "S", 1) == 0)
         {
-            printf("[r.c] Executing local command:\n > %s\n", comm.command);
-            exec_command(comm, true);
+            char *stdout;
+            sprintf(stdout, "stdout:%s", recvBuff);
+            return stdout;
         }
-        else {
-            printf("[r.c] Error: Unknown command location.");
-            return -1;
+        else
+        {
+            printf("[r.c] Error: Handling of 'I' / 'F' not enabled.\n");
         }
     }
-}
-
-int manage_actionsets(){
-    for (int set_index = 0; set_index < MAX_ACTIONSETS; set_index++)
+    else
     {
-        if (actionsets[set_index].num_actions > 0)
-        {
-            if (manage_commands(actionsets[set_index]) != EXIT_SUCCESS)
-            {
-                printf("[r.c] Error: Failed to execute actionset.\n");
-                return EXIT_FAILURE;
-            }
-        }
+        printf("[r.c] Error: Unknown header code.\n");
+        return "-1";
     }
+    return "-1";
 }
-
-int connect_servers() {
-    for (int s_i = 0; s_i < numServers; s_i++)
-    {
-        // add a new socket to the server
-        servers[s_i].sockfd = connect_socket(servers[s_i].host, servers[s_i].port);
-        
-        // send message to server on new socket
-        send_header(servers[s_i].sockfd, EXEC_COST_HEADER.code, NULL);
-
-        // receive response from server
-        HEADER receive = receive_header(servers[s_i].sockfd, &receive);
-
-        // handle server response
-        manage_response(receive, servers[s_i]);
-
-        // // update costs
-        // server_index_cost_array = get_cost_list(numServers);
-    }
-}
-
-// int update_server_costs() {
-//     for (int s_i = 0; s_i < numServers; s_i++)
-//     {
-//         // send message to server on new socket
-//         send_header(servers[s_i].sockfd, EXEC_COST_HEADER.code, NULL);
-
-//         // receive response from server
-//         HEADER receive = receive_header(servers[s_i].sockfd, &receive);
-
-//         // handle server response
-//         manage_response(receive, servers[s_i]);
-        
-//         // update costs
-//         server_index_cost_array = get_cost_list(numServers);
-//     }
-// }
-
 // -----------------------------------------------------------------------------
 // SENDING FUNCTIONS
 // -----------------------------------------------------------------------------
 
 // Sends message header to the socket.
-int send_header(int sockfd, char *code, char* val){
-    if (val == NULL) {
+int send_header(SERVER server, char *code, char *val)
+{
+    int sockfd;
+    if (val == NULL)
+    {
         val = "";
     }
 
@@ -441,88 +393,47 @@ int send_header(int sockfd, char *code, char* val){
     char header[HEADER_LEN];
     int pad_len = HEADER_LEN - strlen(code) - strlen(val);
     char padding[pad_len];
-    memset(padding, ' ', pad_len);
-    sprintf(header, "%s%s%s", code, val, padding);
+
+    int msg_len = strlen(val);
+
+    char send_len[4];
+    sprintf(send_len, "%d", msg_len);
+
+    for (int i = 0; i < pad_len; i++){
+        padding[i] = ' ';
+    }
+
+    strcat(header, code);
+    strcat(header, send_len);
+    strcat(header, val);
 
     printf("[r.c] Sending header.\n");
+    sockfd = connect_server(server);
+
     if (send(sockfd, header, strlen(header), 0) < 0)
     {
-        printf("\n[r.c] Error: Send Failed \n");
+        printf("\n[r.c] Error: Header Sending Failed \n");
         return -1;
     }
-    return 1;
+    if (send(sockfd, val, msg_len, 0) < 0)
+    {
+        printf("\n[r.c] Error: Message Sending Failed \n");
+        return -1;
+    }
+
+    return sockfd;
 }
 
 // Writes string to socket.
-int send_message(int sockfd, char *code, char *message)
+char *send_message(SERVER server, char *code, char *message)
 {
-    char len = strlen(message);
-    char *len_str;
-    sprintf(len_str, "%d", len);
+    int sockfd;
 
-    send_header(sockfd, code, len_str);
-    HEADER receive = receive_header(sockfd, false);
+    sockfd = send_header(server, code, message);
+    char* receive = receive_header(sockfd, false);
+
+    return receive;
 }
-
-// -----------------------------------------------------------------------------
-// RECEIVING FUNCTIONS
-// -----------------------------------------------------------------------------
-
-// Sends message header to the socket.
-HEADER receive_header(int sockfd, bool uses_flags)
-{
-    HEADER header = {
-        .code = NULL,
-        .flags = NULL,
-        .length = NULL
-    };
-
-    if (sockfd < 0)
-    {
-        printf("[r.c] Error: Socket is not open.\n");
-        return header;
-    }
-    char *code;
-    char *len;
-    char *flags = NULL;
-    char *recvBuff;
-
-    recvBuff = read(sockfd, recvBuff, HEADER_LEN);
-    if (recvBuff == NULL)
-    {
-        printf("[r.c] Error: Could not read from socket.\n");
-        return header;
-    }
-
-    printf("[r.c] Header received.\n");
-    memcpy(code, recvBuff, CODE_LEN);
-
-    if (uses_flags == true)
-    {
-        memcpy(flags, recvBuff + CODE_LEN, HEADER_LEN - CODE_LEN);
-        memcpy(len, recvBuff + CODE_LEN + RESPONSE_LEN, HEADER_LEN - CODE_LEN - RESPONSE_LEN);
-    }
-    else 
-    {
-        memcpy(len, recvBuff + CODE_LEN, HEADER_LEN - CODE_LEN);
-    }
-
-    char *ptr = strchr(len, " ");
-    *ptr = '\0';
-
-    printf(" > Code: %s\n", code);
-    printf(" > Flag: %s\n", code);
-    printf(" > Leng: %s\n", len);
-
-    HEADER header = {
-        .code = code,
-        .flags = flags,
-        .length = len,
-    };
-
-    return header;
-}
-
 
 // -----------------------------------------------------------------------------
 // PRINTERS
@@ -591,43 +502,85 @@ void print_servers()
     }
 }
 
-
 // -----------------------------------------------------------------------------
-// UTILITY FUNCTIONS
+// COMMUNICATION MANAGEMENT
 // -----------------------------------------------------------------------------
 
-void swap(int *x, int *y)
-{
-    int tmp = *x;
-    *x = *y;
-    *y = tmp;
-}
+// Executes the command on a server where command needs executing.
 
-void sort(int costs[], int n)
+int exec_command(COMMAND comm, bool local)
 {
-    int i, j, min_idx;
+    int try_index = server_index_cost_array[0];
+    SERVER executor = servers[try_index];
 
-    for (i = 0; i < n - 1; i++)
+    for (int i = 0; i < numServers; i++)
     {
-        min_idx = i;
-        for (j = i + 1; j < n; j++)
-            if (costs[j] < costs[min_idx])
-                min_idx = j;
+        if (executor.local == local)
+        {
+            printf("[r.c] Server selected: %s\n", executor.full_host);
+            char *sendBuff = comm.command;
+            int len = strlen(sendBuff);
+            char send_len[len];
+            int sockfd;
 
-        swap(&costs[min_idx], &costs[i]);
+            sprintf(send_len, "%d", len);
+            send_header(executor, EXECUTE_GET, send_len);
+            send_message(executor, EXECUTE_GET, comm.command);
+            receive_header(executor.sockfd, false);
+            return 1;
+        }
+        else
+        {
+            try_index++;
+            SERVER executor = servers[try_index];
+        }
     }
+    return -1;
 }
 
-int* get_cost_list(int num_servers)
+// Given actionset, attempts to execute all commands in the set.
+int manage_commands(ACTIONSET actionset)
 {
-    int costs[num_servers];
-    for (int i = 0; i < num_servers; i++)
+    for (int i = 0; i < actionset.num_actions; i++)
     {
-        costs[i] = servers[i].cost;
+        COMMAND comm = actionset.commands[i];
+
+        if (strcmp(comm.location, "remote") == 0)
+        {
+            printf("[r.c] Executing remote command:\n > %s\n", comm.command);
+            exec_command(comm, false);
+        }
+        else if (strcmp(comm.location, "local") == 0)
+        {
+            printf("[r.c] Executing local command:\n > %s\n", comm.command);
+            exec_command(comm, true);
+        }
+        else
+        {
+            printf("[r.c] Error: Unknown command location.");
+            return -1;
+        }
     }
-    sort(costs, num_servers);
-    return costs;
+    return EXIT_SUCCESS;
 }
+
+int manage_actionsets()
+{
+    for (int set_index = 0; set_index < MAX_ACTIONSETS; set_index++)
+    {
+        if (actionsets[set_index].num_actions > 0)
+        {
+            if (manage_commands(actionsets[set_index]) != EXIT_SUCCESS)
+            {
+                printf("[r.c] Error: Failed to execute actionset.\n");
+                return EXIT_FAILURE;
+            }
+        }
+    }
+    return EXIT_SUCCESS;
+}
+
+
 
 // -----------------------------------------------------------------------------
 // MAIN
@@ -667,9 +620,7 @@ int main(int argc, char *argv[])
     print_actionsets();
     print_servers();
 
-
-    
-    
+    manage_actionsets();
 
     return EXIT_SUCCESS;
 }
