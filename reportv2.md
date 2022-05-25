@@ -1,27 +1,46 @@
 # Protocol
 
-The basis of the protocol is a fixed size, 64 byte UTF-8 header sent between the client and server, and a variable length "payload", which size is indicated in the header.
+For our client-server protocol, communications are undertaken through used of a fixed size, 64 byte, UTF-8 header. This header is sent between the client and server in order to describe the manner in which communications will proceed. 
 
-The first two bytes of the header is the "code", one of:
+The header is comprised of up to three components: (1) communication code; (2) option flags; and (3) length of the message to be sent (called the payload).  The payload is then sent to the recipient, with it's data expected to match the header-described attributes. Payloads can be of variable length, which is why their length is indicated by the header.
 
-* DISCONN_MSG     = "!D"
-  - Client: sends to server once it has finished with it.
-  - Server: cleans up data structures for client
-* COMMAND_MSG     = "!C"
-  - Client: Sends this with a payload of command to execute.
-  - Server: Executes the payload from this packet, and captures exit state, stdout, stderr, and any generated files, and passes it off to the client
-* REQUEST_MSG     = "!R"
-  - Client: Sends this to indicate to the server that it will need to receive files
-  - Server: Prepares to receive files from the client
-* SUCCEED_RSP     = "!S"
-  - Client: Indicates success, should keep processing the packet and rakefile. Exit code equals 0 since otherwise it would be a FAILURE_RSP packet
-  - Server: Sends this to indicate execution was successful (exit code == 0)
-* FAILURE_RSP     = "!F"
-  - Client: Indicates failure, receive two packets, one containing the stderr and one containing the exit code.
-  - Server: Sends this to indicate execution was unsuccessful. Detect based on exit code.
-* EXECUTE_GET     = "!E"
-  - Client: Sends this to get current amount of requests server is servicing
-  - Server: Sends active thread count to client.
+## Communication Codes
+
+These are the first two bytes of the header, called the communication code, or `code`. The code is one of a set of preset values, each indicating the manner in which communications should proceed. These values are as follows:
+
+#### `DISCONN_MSG`  (!D)
+
+- **Client**: sends to server once it has finished with it.
+- **Server**: cleans up data structures for client
+
+#### `COMMAND_MSG`  (!C)
+
+- **Client**: Sends this with a payload of command to execute.
+- **Server**: Executes the payload from this packet, and captures exit state, stdout, stderr, and any generated files, and passes it off to the client
+
+#### `REQUEST_MSG`  (!R)
+
+- **Client**: Sends this to indicate to the server that it will need to receive files
+- **Server**: Prepares to receive files from the client
+
+#### `SUCCEED_RSP` (!S)
+
+- **Client**: Indicates success, should keep processing the packet and rakefile. Exit code equals 0 since otherwise it would be a FAILURE_RSP packet
+- **Server**: Sends this to indicate execution was successful (exit code == 0)
+
+#### `FAILURE_RSP`  (!F)
+
+- **Client**: Indicates failure, receive two packets, one containing the stderr and one containing the exit code.
+- **Server**: Sends this to indicate execution was unsuccessful. Detect based on exit code.
+
+#### `EXECUTE_GET`  (!E)
+
+- **Client**: Sends this to get current amount of requests server is servicing
+- **Server**: Sends active thread count to client, effectively the load of the server.
+
+
+
+## Option Flags
 
 The next three bytes are "options", only used on successful execution responses. These are positionally sensitive, and are either set, or unset(replaced with a space):
 
