@@ -30,7 +30,7 @@ class Codes:
 # Client objects manage connections to servers in the Rakefile.
 class Client: 
     def __init__(self, rakeData, v=True):
-        print("[client]  Initialised rake.p client.")
+        if v: print("[client]  Initialised rake.p client.")
         self.ACTIONSETS             = rakeData.actionsets
         # addrs   = (host str, port int)
         # servers = addrs.join()
@@ -41,6 +41,7 @@ class Client:
         # SERVER[i] = "127.0.0.1:5050"
         self.DIRPATH = os.getcwd()
         self.dirs = dict()
+        self.v = v
 
         for hostname in rakeData.hosts:
             self.SERVERS.append(hostname)
@@ -54,7 +55,7 @@ class Client:
 
         #self.SOCKETS[SERVER] = sock
         sock.connect_ex(ADDR)
-        print(f"[socket]  Opened and connected to socket at {SERVER}.")
+        if self.v: print(f"[socket]  Opened and connected to socket at {SERVER}.")
         return sock
 
     def send(self, socket, type, addr, val):
@@ -62,7 +63,7 @@ class Client:
             try:
                 socket.sendall(type.encode(Comms.FORMAT))
                 self.send_command(socket, val, addr)
-                print(f"[command@{addr}] > {val} ")
+                print(f"[command@{self.get_hostname_from_socket(socket)}] > {val} ")
             except Exception as e:
                 print(f"Exception occurred while sending a command: {e}")
                 exit()
@@ -119,13 +120,13 @@ class Client:
         header = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
         code = header[0:2]
         response_flags = header[2:5]
-        print(f"\nRECEIVED NEW PACKET")
-        print(f"HEADER: {header}")
+        if self.v: print(f"\nRECEIVED NEW PACKET")
+        if self.v: print(f"HEADER: {header}")
 
         if code == Codes.EXECUTE_GET:
             length = int(header[2:-1])
             payload = int(socket.recv(length).decode(Comms.FORMAT))
-            print(f"EXEC COST: {payload}")
+            if self.v: print(f"EXEC COST: {payload}")
             socket.setblocking(0)
             return payload
 
@@ -136,16 +137,18 @@ class Client:
                 filestream_flag = response_flags[0:2]
                 if filestream_flag == Codes.FILENAME:
                     payload = socket.recv(length).decode(Comms.FORMAT)
-                    print(f"FILENAME: {payload}")
+                    if self.v: print(f"FILENAME: {payload}")
                     return payload
                 if filestream_flag == Codes.FILESIZE:
                     payload = socket.recv(length).decode(Comms.FORMAT)
-                    print(f"FILESIZE: {payload}")
+                    if self.v: print(f"FILESIZE: {payload}")
                     return payload
 
             if response_flags[0] == Codes.STDOUTP:
                 payload = socket.recv(length).decode(Comms.FORMAT)
-                print(f"STDOUT = {payload}")
+                if length == 0:
+                    payload = "No stdout was reported."
+                if self.v: print(f"STDOUT = {payload}")
 
                 if response_flags[1] == Codes.INCFILE:
                     self.receive_filestream(socket)
@@ -153,8 +156,11 @@ class Client:
 
         elif code == Codes.FAILURE_RSP:
             length = int(header[2:-1])
-            print("Server failed to execute:")
-            print(socket.recv(length).decode(Comms.FORMAT))
+            print("Server reported failure to execute command.")
+            stderr = socket.recv(length).decode(Comms.FORMAT)
+            if length == 0:
+                stderr = "No stderr was reported."
+            print(f"stderr: {stderr}")
             self.send(sock, Codes.DISCONN_MSG, "", "")
             exit()
 
@@ -183,8 +189,7 @@ class Client:
         socket.setblocking(0)
 
     def send_filestream(self, socket, files):
-        print(f"sending filestream of {files}")
-        print(os.getcwd())
+        if self.v: print(f"[filestream] sending filestream of {files} to {self.get_hostname_from_socket(socket)}")
         #filestreams are blocking
         socket.setblocking(1)
         #send filestream packet
@@ -229,6 +234,9 @@ class Client:
                             
         socket.setblocking(0)
 
+    def get_hostname_from_socket(self, socket):
+        peername = socket.getpeername()
+        return f"{peername[0]}:{str(peername[1])}"
 # Creates an object from parsed Rakefile information. 
 class Parser:
   def __init__(self, path, v=True):
@@ -242,7 +250,7 @@ class Parser:
 
     # Populates details data structures
     try:
-        self.readRakefile()
+        self.readRakefile(v)
     except:
         print("[parser]  Error: No Rakefile found!")
         print("\n[r.p] Execution ended due to an error.")
@@ -253,7 +261,6 @@ class Parser:
   # Prints all values held in the Parser object.
   def printRakeDetails(self):
     if self.actionsets and self.hosts :
-      print("[parser]  Printing results...\n|")
       print("|\tPORT:", self.port)
       print("|\tHOSTS:", self.hosts)
 
@@ -266,11 +273,11 @@ class Parser:
       print("[parser]  Cannot print; no Rakefile parsed!")
 
   # Performs parsing, populates data structures of Parser.
-  def readRakefile(self):
-    print("[parser]  Reading Rakefile...")
+  def readRakefile(self, v = True):
+    if v: print("[parser]  Reading Rakefile...")
     with open(self.path, "r") as f:
         line = f.readline()   
-        print(line)
+        if v: print(line)
         while line:
             if line.startswith("actionset"):
                 commands = list()   # List of commands found in an ACTIONSETS.
@@ -333,6 +340,12 @@ if __name__ == '__main__':
     # assumption that the client is in its own folder, and the rake is in the 
     #   folder above the client's folder
     default_path = os.path.join(os.getcwd(), "Rakefile")
+    try:
+        v = sys.argv[2]
+        print("[r.p]\tVerbose mode enabled.\n")
+    except IndexError:
+        v = False
+        print("[r.p]\tVerbose mode disabled. Enable by passing either `1` or `True` as argv[2] (you may have to specify a Rakefile in argv[1])\n")
 
     try:
         rakefile_path    = sys.argv[1]
@@ -340,25 +353,25 @@ if __name__ == '__main__':
     except IndexError:
         rakefile_path    = default_path
         print("[r.p]\tNo Rakefile specified, using default path.")
-        print(f"|\n|\t{default_path}\n|")
+        if v: print(f"|\n|\t{default_path}\n|")
     except:
         print(f"[r.p]\tRakefile not found at path:\n\t'{sys.argv[1]}'")
         exit()
 
+
     # Extract information from Rakefile.
-    rakefileData  = Parser(rakefile_path)
+    rakefileData  = Parser(rakefile_path, v)
 
     # Uses Parser object to populate client data.
-    print("\n[r.p]\tInstantiating client.")
-    client   = Client(rakefileData)
-    print(client.ADDRS)
+    print("\n[r.p]\tInstantiating client.\n")
+    client   = Client(rakefileData, v)
     ready = client.ADDRS
     watchlist = []
     for actionset_num, actionset in enumerate(client.ACTIONSETS):
-        print(f"\nEXECUTING ACTIONSET {actionset_num}") 
+        if v: print(f"\n[main]\tEXECUTING ACTIONSET {actionset_num}") 
         commands_sent = 0
         for msg in actionset:
-            print(f"\nEXECUTING ACTION: {msg}") 
+            if v: print(f"\n[main]\tEXECUTING ACTION: {msg}") 
             location, command, required = msg[0], msg[1], msg[2]
 
             if location == "remote":
@@ -378,7 +391,7 @@ if __name__ == '__main__':
                 sock = client.connect_to_socket(("localhost", int(rakefileData.port)))
 
             # send requirements (if any)
-            print(f"requirements required: {required}")
+            if v: print(f"[main]\trequirements to send: {required}")
             if required != []:
                 client.send(sock, Codes.REQUEST_MSG, "", required)
 
@@ -386,11 +399,11 @@ if __name__ == '__main__':
             client.send(sock, Codes.COMMAND_MSG, "", command)
             watchlist.append(sock)
             commands_sent += 1
-        print(f"ALL COMMANDS SENT FOR ACTIONSET {actionset_num}\n\n")
+        if v: print(f"[main]\tALL COMMANDS SENT FOR ACTIONSET {actionset_num}\n\n")
 
         while True:
             readable = select.select(watchlist, [], [])[0]
-            print(f"readable: {readable}")
+            if v: print(f"[main]\treadable sockets: {readable}")
             if readable != []:
                 for sock in readable:
                     client.handle_response(sock)
