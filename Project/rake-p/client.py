@@ -185,6 +185,7 @@ class Client:
                 data = socket.recv(filesize)
                 f.write(data)
             f.close()
+            print(f"[filestream]\tReceived file: {filename}")
             files_to_receive -= 1 
         socket.setblocking(0)
 
@@ -363,12 +364,12 @@ if __name__ == '__main__':
     rakefileData  = Parser(rakefile_path, v)
 
     # Uses Parser object to populate client data.
-    print("\n[r.p]\tInstantiating client.\n")
+    print("\n[r.p]\tInstantiating client.")
     client   = Client(rakefileData, v)
     ready = client.ADDRS
     watchlist = []
     for actionset_num, actionset in enumerate(client.ACTIONSETS):
-        if v: print(f"\n[main]\tEXECUTING ACTIONSET {actionset_num}") 
+        print(f"\n[main]\tactionset{actionset_num}") 
         commands_sent = 0
         for msg in actionset:
             if v: print(f"\n[main]\tEXECUTING ACTION: {msg}") 
@@ -376,15 +377,16 @@ if __name__ == '__main__':
 
             if location == "remote":
                 # poll for cost
-                lowestCost = 0
+                lowestCost = float('inf')
                 lowestCostIndex = 0
                 for i, server in enumerate(ready):
                     sock = client.connect_to_socket(server, 1)
                     client.send(sock, Codes.EXECUTE_GET, server, "")
                     exec_cost = int(client.handle_response(sock, server))
-                    if exec_cost <= lowestCost:
+                    if exec_cost < lowestCost:
                         lowestCostIndex = i
                         lowestCost = exec_cost
+                    if v: print(f"[main]\tCost of executing command on server: {exec_cost} lowest cost = {lowestCost}")
                     client.send(sock, Codes.DISCONN_MSG, server, "")
                 sock = client.connect_to_socket(ready[lowestCostIndex])
             else:
