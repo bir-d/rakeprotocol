@@ -5,6 +5,7 @@ import threading
 import sys
 import subprocess
 import errno
+import shutil
 
 class Comms:
     HEADER = 64
@@ -33,7 +34,7 @@ class Server:
     def __init__(self, host, port):
         self.HOST, self.PORT, self.SERVER = host, int(port), f"{host}:{port}"
         self.ADDR       = (host, int(port))
-        self.DIRPATH    = os.getcwd() 
+        self.DIRPATH    = os.path.abspath(os.getcwd()) 
 
         self.clients = list()
         self.dirs = dict()  # dirs[CLIENTHOST] = directory/path/of/client/files 
@@ -49,21 +50,21 @@ class Server:
         
         while True: # TODO: Look into how to send back more than just stdout to client
             conn, addr = self.server.accept() # blocks til connected
-            new_client = get_hostname(addr) 
+            new_client = get_hostname_from_socket(conn) 
             self.clients.append(new_client)
             os.chdir(self.DIRPATH)
-            self.dirs[new_client] = create_dir(f"{new_client}_tmp")
+            os.mkdir(new_client)
+            clientpath = os.path.join(self.DIRPATH, new_client)
+            self.dirs[new_client] = os.path.abspath(clientpath)
             
             thread = threading.Thread(target=self.manage_connection, args=(conn, addr))
             thread.start()
             print(f"(active: {threading.activeCount() - 1})\n")
 
     def manage_connection(self, conn, addr):
-        print(f"NEW: {get_hostname(addr)}")
+        print(f"NEW: {get_hostname_from_socket(conn)}")
         connected = True
         required = []
-        os.chdir(self.DIRPATH)
-        os.chdir(self.dirs[get_hostname(addr)])
         try:
             while connected:
                 msg_type = conn.recv(2).decode(Comms.FORMAT) 
@@ -106,21 +107,23 @@ class Server:
 
 
     def execute_command(self, msg, addr, conn, required = []):
+        os.chdir(get_socket_dir(conn, self.dirs))
+        print(f"EXECUTING COMMAND {msg} IN DIRECTORY {os.getcwd()} FOR {get_hostname_from_socket(conn)}")
         print(f"[{addr[0]}:{str(addr[1])}]: > {msg}")
         message = msg.split()
         generated_files = []
         # TODO: error handling
         try:
-            with subprocess.Popen(message, stdout=subprocess.PIPE) as proc:
+            with subprocess.Popen(message, stdout=subprocess.PIPE, cwd=get_socket_dir(conn, self.dirs)) as proc:
                 result = proc.stdout.read()
                 print("stdout: "+ result.decode(Comms.FORMAT))
 
             code = Codes.SUCCEED_RSP
             
-            directory_contents = os.listdir()
+            directory_contents = os.listdir(get_socket_dir(conn, self.dirs))
             for file in directory_contents:
                 if file not in required:
-                    generated_files.append(file)
+                    generated_files.append(get_socket_dir(conn, self.dirs) + file)
                     print(f"Generated file detected: {file}")
 
             if generated_files != []:
@@ -144,6 +147,7 @@ class Server:
 
     def disconnect_client(self, addr):
         self.clients.remove(get_hostname(addr))
+        #shutil.rmtree(self.dirs[get_hostname(addr)])
         self.dirs.pop(get_hostname(addr))
 
     # citation: https://stackoverflow.com/a/17668009
@@ -159,6 +163,8 @@ class Server:
         return data
 
     def receive_filestream(self, socket, return_received = False):
+        os.chdir(self.dirs[get_hostname_from_socket(socket)])
+        print(f"receiving filestream from {get_hostname_from_socket(socket)}. I am in {os.getcwd()}")
         print("receiving filestream")
         received_files = []
         # metadata packet
@@ -200,7 +206,7 @@ class Server:
             socket.sendall(Codes.FILETRAN.encode(Comms.FORMAT))
 
             # receive data and write to file https://www.thepythoncode.com/article/send-receive-files-using-sockets-python
-            with open(filename, "wb") as f:
+            with open(get_socket_dir(socket, self.dirs) + filename, "wb") as f:
                 data = self.recvall(socket, filesize)
                 f.write(data)
             f.close()
@@ -230,10 +236,11 @@ class Server:
 
                 if filestream_code == Codes.FILENAME:
                     # send filename
+                    filename = os.path.basename(file)
                     filestream_code = Codes.FILENAME + Codes.FILETRN
-                    filename_length = str(len(file))
+                    filename_length = str(len(filename))
                     padding = " " * (int(Comms.HEADER) - len(code) - len(filestream_code) - len(filename_length))
-                    filename_packet = str(code + filestream_code + filename_length + padding + file)
+                    filename_packet = str(code + filestream_code + filename_length + padding + filename)
                     socket.sendall(filename_packet.encode(Comms.FORMAT))
 
                 if filestream_code == Codes.FILESIZE:
@@ -249,26 +256,31 @@ class Server:
                     # send file https://www.thepythoncode.com/article/send-receive-files-using-sockets-python
                     with open(file, "rb") as f:
                         while True:
-                            data = f.read(Comms.MAX_LEN)
-                            if not data:
-                                break
+                            data = f.read()
                             socket.sendall(data)
 
 
 def get_hostname(addr):
     return f"{addr[0]}:{str(addr[1])}"
 
-def create_dir(dirName):
-    print("[mkdir]  Creating '" + dirName+ "' in CD.")
-    try: 
-        os.mkdir(dirName)
-        print("[mkdir]  Successfully created directory.")
-    except FileExistsError:  # Thrown where dir exists
-        print("[mkdir]  Directory already exists.")
-    except: # Any other errors must halt execution 
-        print("[mkdir]   ERROR: Cannot access or create directory.")
-        exit()
-    return os.getcwd() + "/" + dirName 
+def get_hostname_from_socket(socket):
+    peername = socket.getpeername()
+    return f"{peername[0]}:{str(peername[1])}"
+
+def get_socket_dir(socket, dirs):
+    return dirs[get_hostname_from_socket(socket)] + "/"
+
+# def create_dir(dirName, location):
+#     print("[mkdir]  Creating '" + dirName+ "' in CD.")
+#     try:
+#         os.mkdir(dirName)
+#         print("[mkdir]  Successfully created directory.")
+#     except FileExistsError:  # Thrown where dir exists
+#         print("[mkdir]  Directory already exists.")
+#     except: # Any other errors must halt execution 
+#         print("[mkdir]   ERROR: Cannot access or create directory.")
+#         exit()
+#     return os.getcwd() + "/" + dirName 
 
 
 if __name__ == '__main__':

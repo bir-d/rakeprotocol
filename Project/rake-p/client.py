@@ -335,7 +335,7 @@ def create_dir(dirName, v=True):
 if __name__ == '__main__':
     # assumption that the client is in its own folder, and the rake is in the 
     #   folder above the client's folder
-    default_path = "/".join(os.getcwd().split("/")[:-1]) + "/Rakefile"
+    default_path = os.path.join(os.getcwd(), "Rakefile")
 
     try:
         rakefile_path    = sys.argv[1]
@@ -392,8 +392,8 @@ if __name__ == '__main__':
         print(f"ALL COMMANDS SENT FOR ACTIONSET {actionset}")
 
         while True:
-            print(f"readable: {readable}")
             readable = select.select(watchlist, [], [])[0]
+            print(f"readable: {readable}")
             if readable != []:
                 for sock in readable:
                     client.handle_response(sock)
@@ -403,10 +403,3 @@ if __name__ == '__main__':
 
             if commands_sent == 0:
                 break
-
-
-
-
-    
-    
-  
