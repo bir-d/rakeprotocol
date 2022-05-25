@@ -1,10 +1,6 @@
-from asyncore import read, socket_map
-from ctypes import addressof
-import errno
 import os
 import socket
 import sys
-import re
 import select
 
 class Comms:
@@ -159,6 +155,7 @@ class Client:
             length = int(header[2:-1])
             print("Server failed to execute:")
             print(socket.recv(length).decode(Comms.FORMAT))
+            self.send(sock, Codes.DISCONN_MSG, "", "")
             exit()
 
     def receive_filestream(self, socket):
@@ -357,8 +354,8 @@ if __name__ == '__main__':
     print(client.ADDRS)
     ready = client.ADDRS
     watchlist = []
-    for actionset in client.ACTIONSETS:
-        print(f"\nEXECUTING ACTIONSET: {actionset}") 
+    for actionset_num, actionset in enumerate(client.ACTIONSETS):
+        print(f"\nEXECUTING ACTIONSET {actionset_num}") 
         commands_sent = 0
         for msg in actionset:
             print(f"\nEXECUTING ACTION: {msg}") 
@@ -389,7 +386,7 @@ if __name__ == '__main__':
             client.send(sock, Codes.COMMAND_MSG, "", command)
             watchlist.append(sock)
             commands_sent += 1
-        print(f"ALL COMMANDS SENT FOR ACTIONSET {actionset}")
+        print(f"ALL COMMANDS SENT FOR ACTIONSET {actionset_num}\n\n")
 
         while True:
             readable = select.select(watchlist, [], [])[0]

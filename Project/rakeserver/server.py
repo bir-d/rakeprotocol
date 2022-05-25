@@ -114,40 +114,59 @@ class Server:
         generated_files = []
         # TODO: error handling
         try:
-            with subprocess.Popen(message, stdout=subprocess.PIPE, cwd=get_socket_dir(conn, self.dirs)) as proc:
-                result = proc.stdout.read()
-                print("stdout: "+ result.decode(Comms.FORMAT))
-
-            code = Codes.SUCCEED_RSP
+            with subprocess.Popen(message, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=get_socket_dir(conn, self.dirs)) as proc:
+                stdout, stderr = proc.communicate()
+                if isinstance(stdout, bytes):
+                    stdout = stdout.decode(Comms.FORMAT)
+                if isinstance(stderr, bytes):
+                    stderr = stderr.decode(Comms.FORMAT)
+                print(f"Type of stdout: {type(stdout)}")
+                print(f"Type of stderr: {type(stderr)}")
+                print("stdout: "+ stdout)
+                print("stderr: "+ stderr)
+                exit_code = proc.returncode
+                print(f"return code: {exit_code}")
             
-            directory_contents = os.listdir(get_socket_dir(conn, self.dirs))
-            for file in directory_contents:
-                if file not in required:
-                    generated_files.append(get_socket_dir(conn, self.dirs) + file)
-                    print(f"Generated file detected: {file}")
+            if exit_code == 0:
+                code = Codes.SUCCEED_RSP
+                
+                # Check for generated files by comparing directory contents with files received for requirements
+                directory_contents = os.listdir(get_socket_dir(conn, self.dirs))
+                for file in directory_contents:
+                    if file not in required:
+                        generated_files.append(get_socket_dir(conn, self.dirs) + file)
+                        print(f"Generated file detected: {file}")
+                # Set incfile flag based on if generated files were detected
+                if generated_files != []:
+                    options = Codes.STDOUTP + Codes.INCFILE + " "
+                else:
+                    options = Codes.STDOUTP + " " + " "
+                # Send packet to client
+                msg_len = str(len(stdout))
+                padding = (' ' * (Comms.HEADER - len(code) - len(options) - len(msg_len)))
+                header = (code + options + msg_len + padding).encode(Comms.FORMAT)
+                conn.sendall(header)
+                conn.sendall(stdout.encode(Comms.FORMAT))
 
-            if generated_files != []:
-                options = Codes.STDOUTP + Codes.INCFILE + " "
-            else:
-                options = Codes.STDOUTP + " " + " "
+                # We need to send generated files, if they exist
+                if generated_files != []:
+                    self.send_filestream(conn, generated_files)
 
-
-            msg_len = str(len(result))
-            padding = (' ' * (Comms.HEADER - len(code) - len(options) - len(msg_len)))
-
-            header = (code + options + msg_len + padding).encode(Comms.FORMAT)
-            conn.sendall(header)
-            conn.sendall(result)
-
-            if generated_files != []:
-                self.send_filestream(conn, generated_files)
+            elif exit_code != 0:
+                code = Codes.FAILURE_RSP
+                payload_length = str(len(stderr))
+                padding = " " * (int(Comms.HEADER) - len(code) - len(payload_length))
+                header = str(code + payload_length + padding).encode(Comms.FORMAT)
+                conn.sendall(header)
+                conn.sendall(stderr.encode(Comms.FORMAT))
 
         except Exception as e:
             print(e)
 
     def disconnect_client(self, addr):
         self.clients.remove(get_hostname(addr))
-        #shutil.rmtree(self.dirs[get_hostname(addr)])
+        print(f"CLEANING UP {get_hostname(addr)}")
+        shutil.rmtree(self.dirs[get_hostname(addr)], ignore_errors=True)
         self.dirs.pop(get_hostname(addr))
 
     # citation: https://stackoverflow.com/a/17668009
