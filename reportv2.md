@@ -129,15 +129,15 @@ actionset3:
       + `!SSI 0[padding]`
       + Get payload
         * Nothing, no stdout
-      + I is set, so we pass the socket off to the filestream handler and receive func1.0
+      + I is set, so we pass the socket off to the filestream handler and receive func1.o
     - select() our watchlist, see 2 is ready
       + Get header
       + `!SSI 0[padding]`
       + Get payload
         * Nothing, no stdout
-      + I is set, so we pass the socket off to the filestream handler and receive func2.0
+      + I is set, so we pass the socket off to the filestream handler and receive func2.o
 
-  Repeat this process for actionsets 2 and 3.
+  Repeat this process for actionsets 2 and 3, unless one of these actions failed. If one did, terminate.
 
 # Remote compilation performace
 
