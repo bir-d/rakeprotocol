@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "*.rmd": "markdown",
+        "Rakefile": "makefile",
+        "inet.h": "c"
+    }
+}

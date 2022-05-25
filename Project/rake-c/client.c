@@ -1,6 +1,3 @@
-// cc -std=c99 -Wall -Werror client.c -o client
-// ./client
-
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -9,14 +6,52 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <errno.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <netdb.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
 
 // -----------------------------------------------------------------------------
+// COMMUNICATION DEFINITIONS
+// -----------------------------------------------------------------------------
 
+// Client Parameters
 #define MAX_COMMANDS 256        // max number of commands in actionset
 #define MAX_SERVERS 256         // max number of host servers
 #define MAX_ACTIONSETS 256      // max number of actionsets in rakefile
 #define MAX_NAME_LEN 64         // max length of a name
 
+// Communication Protocol
+#define HEADER_LEN 64
+#define CODE_LEN 2
+#define RESPONSE_LEN 3
+#define MAX_LEN 1024
+#define FORMAT = "utf-8"
+
+// Message Codes 
+#define DISCONN_MSG "!D"
+#define COMMAND_MSG "!C"
+#define REQUEST_MSG "!R"
+#define EXECUTE_GET "!E"
+
+// Response Types
+#define SUCCEED_RSP "!S"
+#define FAILURE_RSP "!F"
+
+// File Options
+#define STDOUTP "S"
+#define INCFILE "I"
+#define FILETRN "F"
+
+// File Transfer Types
+#define FILENAME "!N"
+#define FILETRAN "!T"
+#define FILESIZE "!Z"
+
+
+// -----------------------------------------------------------------------------
+// DATA STRUCTURES
 // -----------------------------------------------------------------------------
 
 typedef struct COMMAND
@@ -41,12 +76,24 @@ typedef struct SERVER
 
 } SERVER;
 
+typedef struct HEADER
+{
+    char code[CODE_LEN];
+    char flags[RESPONSE_LEN];
+    char length[HEADER_LEN];
+} HEADER;
+
+
+// -----------------------------------------------------------------------------
+// GLOBAL VARIABLES
 // -----------------------------------------------------------------------------
 
-// Global actionset variable for client
-ACTIONSET actionsets[MAX_COMMANDS];
-SERVER servers[MAX_SERVERS];
+ACTIONSET   actionsets[MAX_COMMANDS];
+SERVER      servers[MAX_SERVERS];
 
+
+// -----------------------------------------------------------------------------
+// PARSING
 // -----------------------------------------------------------------------------
 
 // Read in the rakefile and store the actionsets in the actionset array
@@ -65,7 +112,6 @@ int read_rakefile(FILE *rake_fp)
     while (fgets(linebuf, 512, rake_fp) != NULL)
     {
         linebuf[strlen(linebuf) - 1] = '\0';
-
         // ignore line if comment, newline, or empty
         if (linebuf[0] == '#' || linebuf[0] == '\n' || linebuf[0] == '\r')
             continue;
@@ -73,7 +119,6 @@ int read_rakefile(FILE *rake_fp)
         else if (strncmp(linebuf, "PORT", strlen("PORT")) == 0)
         {
             default_port = atoi(linebuf + strlen("PORT = "));
-            // printf("> parse: default port set to %d\n", default_port);
         }
         // finds host servers and stores in server array
         else if (strncmp(linebuf, "HOST", strlen("HOST")) == 0)
@@ -104,8 +149,6 @@ int read_rakefile(FILE *rake_fp)
                     sprintf(servers[server_index].full_host, "%s:%s", servers[server_index].full_host, port_token);
                     servers[server_index].port = atoi(port_token);
                 }
-                
-                // printf("> parse: found host '%s'\n", servers[server_index].host);
             }
         }
         else if (strncmp(linebuf, "actionset", strlen("actionset")) == 0)
@@ -124,7 +167,6 @@ int read_rakefile(FILE *rake_fp)
             {
                 requires_index++;
                 strcpy(actionsets[actionset_index].commands[command_index].requires[requires_index], token);
-                // printf("%s ", actionsets[actionset_index].commands[command_index].requires[requires_index]);
                 token = strtok(NULL, " ");
             }
         }
@@ -139,13 +181,11 @@ int read_rakefile(FILE *rake_fp)
             {
                 strcpy(actionsets[actionset_index].commands[command_index].location, "remote");
                 strcpy(actionsets[actionset_index].commands[command_index].command, linebuf + 8);
-                // printf("(%i) remote: %s\n", command_index, actionsets[actionset_index].commands[command_index].command);
             }
             else
             {
                 strcpy(actionsets[actionset_index].commands[command_index].location, "local");
                 strcpy(actionsets[actionset_index].commands[command_index].command, linebuf + 1);
-                // printf("local: %s\n", actionsets[actionset_index].commands[command_index].command);
             }
         }
     }
@@ -153,6 +193,185 @@ int read_rakefile(FILE *rake_fp)
     return EXIT_SUCCESS;
 }
 
+
+// -----------------------------------------------------------------------------
+// SOCKETRY
+// -----------------------------------------------------------------------------
+
+// Establish connection to server on host and port given.
+int connect_socket(char *host, int port)
+{
+    printf("\n[r.c] Connecting to '%s:%d'...\n", host, port);
+
+    int sockfd = 0, n = 0;
+    struct sockaddr_in serv_addr;
+    char recvBuff[1024];
+
+    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+    {
+        printf("\n[r.c] Error: Could not create socket \n");
+        return 1;
+    }
+
+    memset(&serv_addr, '0', sizeof(serv_addr));
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(port);
+
+    if (inet_pton(AF_INET, host, &serv_addr.sin_addr) <= 0)
+    {
+        printf("\n[r.c] Error: inet_pton error occured\n");
+        return -1;
+    }
+
+    if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
+    {
+        printf("\n[r.c] Error: Connect Failed \n");
+        return -1;
+    }
+
+    printf("[r.c] Sucessfully connected.\n");
+
+    return sockfd;
+}
+
+
+// -----------------------------------------------------------------------------
+// COMMUNICATION MANAGEMENT
+// -----------------------------------------------------------------------------
+
+// Manages the approach to take by the servers header received.
+int manage_response(HEADER receive){
+    if (receive.code == EXECUTE_GET)
+    {
+        // handle  execcost response
+    }
+    else if (receive.code == SUCCEED_RSP)
+    {
+        // handle  success response
+    }
+    else if (receive.code == FAILURE_RSP)
+    {
+        // handle  failure response
+    }
+    else if (receive.code == FILENAME)
+    {
+        // handle  filename response
+    }
+    else if (receive.code == FILESIZE)
+    {
+        // handle  filesize response
+    }
+    else if (receive.code == FILETRAN)
+    {
+        // handle  filetran response
+    }
+}
+
+
+// -----------------------------------------------------------------------------
+// SENDING FUNCTIONS
+// -----------------------------------------------------------------------------
+
+// Sends message header to the socket.
+int send_header(int sockfd, char *code, char* val){
+    if (val == NULL) {
+        val = "";
+    }
+
+    if (strlen(code) + strlen(val) > HEADER_LEN)
+    {
+        printf("[r.c] Error: Values for header are too long.\n");
+        return -1;
+    }
+
+    char header[HEADER_LEN];
+    int pad_len = HEADER_LEN - strlen(code) - strlen(val);
+    char padding[pad_len];
+    memset(padding, ' ', pad_len);
+    sprintf(header, "%s%s%s", code, val, padding);
+
+    printf("[r.c] Sending header.\n");
+    if (send(sockfd, header, strlen(header), 0) < 0)
+    {
+        printf("\n[r.c] Error: Send Failed \n");
+        return -1;
+    }
+    return 1;
+}
+
+// Writes string to socket.
+int send_message(int sockfd, char *code, char *message)
+{
+    char len = strlen(message);
+    char *len_str;
+    sprintf(len_str, "%d", len);
+
+    send_header(sockfd, code, len_str);
+    HEADER receive = receive_header(sockfd, false);
+}
+
+// -----------------------------------------------------------------------------
+// RECEIVING FUNCTIONS
+// -----------------------------------------------------------------------------
+
+// Sends message header to the socket.
+HEADER receive_header(int sockfd, bool uses_flags)
+{
+    HEADER header = {
+        .code = NULL,
+        .flags = NULL,
+        .length = NULL
+    };
+
+    if (sockfd < 0)
+    {
+        printf("[r.c] Error: Socket is not open.\n");
+        return header;
+    }
+    char *code;
+    char *len;
+    char *flags = NULL;
+    char *recvBuff;
+
+    recvBuff = read(sockfd, recvBuff, HEADER_LEN);
+    if (recvBuff == NULL)
+    {
+        printf("[r.c] Error: Could not read from socket.\n");
+        return header;
+    }
+
+    printf("[r.c] Header received.\n");
+    memcpy(code, recvBuff, CODE_LEN);
+
+    if (uses_flags == true)
+    {
+        memcpy(flags, recvBuff + CODE_LEN, HEADER_LEN - CODE_LEN);
+        memcpy(len, recvBuff + CODE_LEN + RESPONSE_LEN, HEADER_LEN - CODE_LEN - RESPONSE_LEN);
+    }
+    else 
+    {
+        memcpy(len, recvBuff + CODE_LEN, HEADER_LEN - CODE_LEN);
+    }
+
+    char *ptr = strchr(len, " ");
+    *ptr = '\0';
+
+    printf(" > Code: %s\n", code);
+    printf(" > Flag: %s\n", code);
+    printf(" > Leng: %s\n", len);
+
+    HEADER header = {
+        .code = code,
+        .flags = flags,
+        .length = len,
+    };
+
+    return header;
+}
+
+
+// -----------------------------------------------------------------------------
+// PRINTERS
 // -----------------------------------------------------------------------------
 
 int get_num_actionsets()
@@ -219,6 +438,8 @@ void print_servers()
 }
 
 // -----------------------------------------------------------------------------
+// MAIN
+// -----------------------------------------------------------------------------
 
 int main(int argc, char *argv[])
 {
@@ -235,7 +456,6 @@ int main(int argc, char *argv[])
         char cwd[256];
         if (getcwd(cwd, 256) == NULL)
             return EXIT_FAILURE;
-        // remove the last '/' from the cwd
         cwd[strlen(cwd) - strlen("rake-c")] = '\0';
         strcat(cwd, "Rakefile");
         printf("\t%s\n", cwd);
@@ -250,9 +470,12 @@ int main(int argc, char *argv[])
 
     if (read_rakefile(rake_fp) != EXIT_SUCCESS)
         return EXIT_FAILURE;
-    
+
+
     print_actionsets();
     print_servers();
+
+    
 
     return EXIT_SUCCESS;
 }
