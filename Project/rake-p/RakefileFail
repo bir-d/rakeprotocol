@@ -1,0 +1,9 @@
+PORT  = 5000
+HOSTS = localhost localhost:5001 localhost:5002
+
+actionset1:
+	remote-sleep 5
+	remote-sleep 5
+	remote-false
+	remote-sleep 5
+	remote-sleep 5

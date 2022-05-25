@@ -3,6 +3,8 @@ import socket
 import sys
 import select
 
+#One global variable, if this is set to True, client needs to disconnect from open connections and exit
+failure_state = False
 class Comms:
     HEADER = 64
     CODE = 2
@@ -155,13 +157,20 @@ class Client:
 
         elif code == Codes.FAILURE_RSP:
             length = int(header[2:-1])
-            print("Server reported failure to execute command.")
+            print(f"[command@{self.get_hostname_from_socket(socket)}]\tServer reported failure to execute command.")
             stderr = socket.recv(length).decode(Comms.FORMAT)
             if length == 0:
-                stderr = "No stderr was reported."
-            print(f"stderr: {stderr}")
-            self.send(sock, Codes.DISCONN_MSG, "", "")
-            exit()
+                stderr = f"[command@{self.get_hostname_from_socket(socket)}]\tNo stderr was reported."
+            else:
+                print(f"[command@{self.get_hostname_from_socket(socket)}]\tstderr: {stderr}")
+
+            header = socket.recv(Comms.HEADER).decode(Comms.FORMAT)
+            length = int(header[2:-1])
+            payload = socket.recv(length).decode(Comms.FORMAT)
+            print(f"[command@{self.get_hostname_from_socket(socket)}]\tExit code: {payload}")
+            print(f"[command@{self.get_hostname_from_socket(socket)}]\tClient will terminate once all responses received.")
+
+
 
     def receive_filestream(self, socket):
         # metadata packet
@@ -414,3 +423,6 @@ if __name__ == '__main__':
 
             if commands_sent == 0:
                 break
+
+        if failure_state:
+            exit()

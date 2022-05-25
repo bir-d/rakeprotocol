@@ -162,11 +162,13 @@ class Server:
 
             elif exit_code != 0:
                 code = Codes.FAILURE_RSP
-                payload_length = str(len(stderr))
-                padding = " " * (int(Comms.HEADER) - len(code) - len(payload_length))
-                header = str(code + payload_length + padding).encode(Comms.FORMAT)
-                conn.sendall(header)
-                conn.sendall(stderr.encode(Comms.FORMAT))
+                payloads = (stderr, str(exit_code))
+                for payload in payloads:
+                    payload_length = str(len(payload))
+                    padding = " " * (int(Comms.HEADER) - len(code) - len(payload_length))
+                    header = str(code + payload_length + padding).encode(Comms.FORMAT)
+                    conn.sendall(header)
+                    conn.sendall(payload.encode(Comms.FORMAT))
 
         except Exception as e:
             print(e)
